@@ -1,389 +1,389 @@
-﻿var ampq = require('amqplib');
-var ifBus = require('./interfaces/BusInterface');
+var util = require('util');
+var amqp = require('amqplib');
 var Promise = require('bluebird');
 var uuid = require('node-uuid');
-
+var Common = require('../OpenTable.Messages.TS/Common');
+var RabbitHutch = (function () {
+    function RabbitHutch() {
+    }
+    RabbitHutch.CreateBus = function (config) {
+        var bus = new Bus(config);
+        return bus;
+    };
+    return RabbitHutch;
+})();
+exports.RabbitHutch = RabbitHutch;
 var Bus = (function () {
     function Bus(config) {
         var _this = this;
-        this.ConfirmChannel = null;
-        this.Connection = null;
-        var handleChannelErrorBound = this.handleChannelError.bind(this);
-        var handleChannelCloseBound = this.handleChannelClose.bind(this);
-
-        this.Start = Promise.resolve(ampq.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat)).then(function (connection) {
-            _this.Connection = connection;
-            return Promise.resolve(connection.createConfirmChannel());
-        }).then(function (channel) {
-            _this.ConfirmChannel = channel;
-            channel.on('error', handleChannelErrorBound);
-            channel.on('close', handleChannelCloseBound);
-            channel.prefetch(config.prefetch);
-            return { success: true };
-        }).catch(function (failReason) {
-            return { success: false, reason: failReason };
-        });
-        //this.ReStart = () => {
-        //    this.Started = Promise.cast<{ success: boolean }>({ success: false, reason: 'restarting' });
-        //    this.ConfirmChannel.close();
-        //    this.Started = Promise.resolve(ampq.connect(url, { heartbeat: heartbeat }))
-        //        .then((connection) => {
-        //            this.Connection = connection;
-        //            return Promise.resolve(connection.createConfirmChannel());
-        //        })
-        //        .then((channel) => {
-        //            this.ConfirmChannel = channel;
-        //            channel.on('error', handleChannelErrorBound);
-        //            channel.on('close', handleChannelCloseBound);
-        //            channel.prefetch(prefetch);
-        //            return { success: true };
-        //        })
-        //        .catch((failReason) => {
-        //            return { success: false, reason: failReason };
-        //        });
-        //}
+        this.config = config;
+        this.rpcQueue = null;
+        this.rpcResponseHandlers = {};
+        this.Channels = {
+            publishChannel: null,
+            rpcChannel: null
+        };
+        try {
+            this.Connection = Promise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.pubChanUp = this.Connection
+                .then(function (connection) { return connection.createConfirmChannel(); })
+                .then(function (confChanReply) {
+                _this.Channels.publishChannel = confChanReply;
+                //this.confirmSendToQueue = <(queue: string, content: NodeBuffer, options: { type: string }) => Promise<boolean>>Promise.promisify(this.Channels.publishChannel.sendToQueue, this.Channels.publishChannel);
+                _this.confirmSendToQueue = _this.Channels.publishChannel.sendToQueue;
+                return true;
+            });
+        }
+        catch (e) {
+            console.log('[ERROR] - Connection problem %s', e);
+        }
     }
-    // ========== Etc  ==========
-    Bus.ToBuffer = function (obj) {
-        return new Buffer(JSON.stringify(obj));
-    };
-
-    Bus.FromBuffer = function (buffer) {
-        return JSON.parse(buffer.toString());
-    };
-
-    Bus.FromSubscription = function (obj) {
-        return JSON.parse(obj.content.toString());
-    };
-
-    Bus.prototype.handleChannelClose = function () {
-        console.log('[LOG] - Channel close called...');
-        //TODO do something here?
-    };
-
-    Bus.prototype.handleChannelError = function (error) {
-        console.error('[ERROR]' + error);
-        //TODO: what else on channel error? shutdown....?
-        //restart channel? below doesn't work yet...
-        //console.info('Attempting bus/channel restart...');
-        //this.ReStart();
-        //this.Started
-        //    .then((started) => {
-        //        if (started.success) {
-        //            console.info('Restarted');
-        //        }
-        //        else {
-        //            console.error('Failed restarting bus/channel: %s', started.reason);
-        //        }
-        //    });
-    };
-
-    Bus.prototype.handleAck = function () {
-        return true;
-    };
-
-    Bus.prototype.handleNack = function (err) {
-        return false;
-    };
-
-    Bus.prototype.RunBusTest = function (log) {
+    // TODO: handle error for msg (can't stringify error)
+    Bus.prototype.SendToErrorQueue = function (msg, err, stack) {
         var _this = this;
-        if (typeof log === "undefined") { log = true; }
-        return this.Start.then(function (started) {
-            if (started.success) {
-                var testResult = _this.TestBus();
-
-                if (log) {
-                    testResult.Publish.then(function (success) {
-                        return console.log('[TEST] - PUBLISH: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Subscribe.then(function (success) {
-                        return console.log('[TEST] - SUBSCRIBE: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Send.then(function (success) {
-                        return console.log('[TEST] - SEND: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Receive.then(function (success) {
-                        return console.log('[TEST] - RECEIVE: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.ReceiveTypes.then(function (success) {
-                        return console.log('[TEST] - RECEIVE TYPES: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Request.then(function (success) {
-                        return console.log('[TEST] - REQUEST: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Response.then(function (success) {
-                        return console.log('[TEST] - RESPONSE: %s', success ? 'PASS' : 'FAIL');
-                    });
-                    testResult.Aggregate.then(function (success) {
-                        return console.log('[TEST] - OVERALL: %s', success ? 'PASS' : 'FAIL');
-                    });
-                }
-
-                return testResult.Aggregate;
-            } else {
-            }
-        });
+        if (err === void 0) { err = ''; }
+        if (stack === void 0) { stack = ''; }
+        return this.pubChanUp
+            .then(function () { return _this.Channels.publishChannel.assertQueue(Bus.defaultErrorQueue, { durable: true, exclusive: false, autoDelete: false }); })
+            .then(function () { return _this.Send(Bus.defaultErrorQueue, new Common.ErrorMessage(JSON.stringify(msg), err, stack)); });
     };
-
-    Bus.prototype.TestBus = function () {
-        var _this = this;
-        var aggregateDeferred = Promise.defer();
-        var publishDeferred = Promise.defer();
-        var subscribeDeferred = Promise.defer();
-        var sendDeferred = Promise.defer();
-        var receiveDeferred = Promise.defer();
-        var receiveTypeDeferred = Promise.defer();
-        var requestDeferred = Promise.defer();
-        var responseDeferred = Promise.defer();
-        var requestRespondTest_CTag = null;
-        var pubSubTest_CTag = null;
-        var sendReceiveTest_CTag = null;
-        var sendReceiveTypedTest_CTag = null;
-
-        var testSubId = 'test-' + uuid.v4();
-        var testQueue = 'testQueue-' + uuid.v4();
-        var testQueueTyped = testQueue + '-Typed';
-
-        this.Start.then(function (started) {
-            if (started.success) {
-                _this.Respond(ifBus.TestMessage.TypeID, ifBus.TestMessageResponse.TypeID, function (msg) {
-                    requestDeferred.resolve(true);
-                    var resp = new ifBus.TestMessageResponse('my response', msg.Text);
-                    return Promise.cast(resp);
-                }).then(function (ctag) {
-                    requestRespondTest_CTag = ctag.consumerTag;
-                    _this.Request(new ifBus.TestMessage('my request'));
-                }).then(function (apcr) {
-                    responseDeferred.resolve(true);
-                }).done();
-
-                _this.Subscribe(testSubId, ifBus.TestMessage.TypeID, function (msg) {
-                    publishDeferred.resolve(true);
-                    subscribeDeferred.resolve(true);
-                }).then(function (ctag) {
-                    pubSubTest_CTag = ctag.consumerTag;
-                    _this.Publish(new ifBus.TestMessage('publish'));
-                }).done();
-
-                _this.Receive(testQueue, function (msg) {
-                    sendDeferred.resolve(true);
-                    receiveDeferred.resolve(true);
-                }).then(function (ctag) {
-                    sendReceiveTest_CTag = ctag.consumerTag;
-                    _this.Send(testQueue, new ifBus.TestMessage('send'));
-                }).done();
-
-                _this.ReceiveTypes(testQueueTyped, [{
-                        type: ifBus.TestMessage.TypeID, handler: function (msg) {
-                            receiveTypeDeferred.resolve(true);
-                        }
-                    }]).then(function (ctag) {
-                    sendReceiveTypedTest_CTag = ctag.consumerTag;
-                    _this.Send(testQueueTyped, new ifBus.TestMessage('send'));
-                }).catch(function (failreason) {
-                    receiveTypeDeferred.reject(failreason);
-                }).done();
-            }
-        });
-
-        Promise.all([publishDeferred.promise, subscribeDeferred.promise, sendDeferred.promise, receiveDeferred.promise, receiveTypeDeferred.promise, requestDeferred.promise, responseDeferred.promise]).then(function (vals) {
-            _this.CancelConsumer(requestRespondTest_CTag).then(function (cancelReply) {
-                return _this.DeleteQueue(ifBus.TestMessage.TypeID, true, true);
-            }).then(function (deleteReply) {
-                return _this.DeleteExchange(ifBus.TestMessage.TypeID, true);
-            });
-
-            _this.CancelConsumer(pubSubTest_CTag).then(function (cancelReply) {
-                _this.DeleteQueue(ifBus.TestMessage.TypeID + '_' + testSubId, true, true);
-            });
-
-            _this.CancelConsumer(sendReceiveTest_CTag).then(function (cancelReply) {
-                _this.DeleteQueue(testQueue, true, true);
-            });
-
-            _this.CancelConsumer(sendReceiveTypedTest_CTag).then(function (cancelReply) {
-                _this.DeleteQueue(testQueueTyped, true, true);
-            });
-
-            aggregateDeferred.resolve(vals.every(function (val) {
-                return val;
-            }));
-        });
-
-        return { Aggregate: aggregateDeferred.promise, Publish: publishDeferred.promise, Subscribe: subscribeDeferred.promise, Send: sendDeferred.promise, Receive: receiveDeferred.promise, ReceiveTypes: receiveTypeDeferred.promise, Request: requestDeferred.promise, Response: responseDeferred.promise };
-    };
-
     // ========== Publish / Subscribe ==========
-    Bus.prototype.Publish = function (obj) {
-        //TODO use everywhere - make "global"
-        var confirmPublish = Promise.promisify(this.ConfirmChannel.publish, this.ConfirmChannel);
-
-        return Promise.resolve(this.ConfirmChannel.assertExchange(obj.TypeID, 'topic', { durable: true, autoDelete: false })).then(function (okExchangeReply) {
-            return confirmPublish(obj.TypeID, '', Bus.ToBuffer(obj), { type: obj.TypeID });
-        }).then(this.handleAck, this.handleNack).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error publishing: %s', failReason);
-            return false;
-        });
-    };
-
-    Bus.prototype.Subscribe = function (subscriberName, type, handler) {
+    Bus.prototype.Publish = function (msg, withTopic) {
         var _this = this;
-        var queueId = type + '_' + subscriberName;
-
-        return Promise.resolve(this.ConfirmChannel.assertQueue(queueId, { durable: true, exclusive: false, autoDelete: false })).then(function (okQueueReply) {
-            return Promise.resolve(_this.ConfirmChannel.assertExchange(type, 'topic', { durable: true, autoDelete: false }));
-        }).then(function (okExchangeReply) {
-            return Promise.resolve(_this.ConfirmChannel.bindQueue(queueId, type, ''));
-        }).then(function (okBindReply) {
-            return _this.ConfirmChannel.consume(queueId, function (msg) {
-                //ack first
-                _this.ConfirmChannel.ack(msg);
-                handler(Bus.FromSubscription(msg));
-            });
-        }).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error creating consumer: %s', failReason);
-            return null;
-        });
+        if (withTopic === void 0) { withTopic = ''; }
+        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+            return Promise.reject(util.format('%s is not a valid TypeID', msg.TypeID));
+        }
+        return this.pubChanUp
+            .then(function () { return _this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }); })
+            .then(function (okExchangeReply) { return _this.Channels.publishChannel.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID }); });
     };
-
-    // ========== Send / Receive ==========
-    Bus.prototype.Send = function (queue, msg) {
-        var confirmSendToQueue = Promise.promisify(this.ConfirmChannel.sendToQueue, this.ConfirmChannel);
-
-        return confirmSendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }).then(this.handleAck, this.handleNack).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error publishing: %s', failReason);
-            return false;
-        });
-    };
-
-    Bus.prototype.Receive = function (queue, handler) {
+    Bus.prototype.Subscribe = function (type, subscriberName, handler, withTopic) {
         var _this = this;
-        return Promise.resolve(this.ConfirmChannel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false })).then(function (okQueueReply) {
-            return _this.ConfirmChannel.consume(queue, function (msg) {
-                //ack first
-                _this.ConfirmChannel.ack(msg);
-                var unWrapMsg = Bus.FromSubscription(msg);
-                handler(unWrapMsg);
-            });
-        }).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error creating consumer: %s', failReason);
-            return null;
-        });
-    };
-
-    Bus.prototype.ReceiveTypes = function (queue, handlers) {
-        var _this = this;
-        return Promise.resolve(this.ConfirmChannel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false })).then(function (okQueueReply) {
-            return _this.ConfirmChannel.consume(queue, function (msg) {
-                //ack first
-                _this.ConfirmChannel.ack(msg);
-                var unWrapMsg = Bus.FromSubscription(msg);
-                handlers.filter(function (handler) {
-                    return handler.type === msg.properties.type;
-                }).forEach(function (handler) {
-                    handler.handler(unWrapMsg);
+        if (withTopic === void 0) { withTopic = '#'; }
+        if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
+            return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+        }
+        var queueID = type.TypeID + '_' + subscriberName;
+        return this.Connection.then(function (connection) {
+            return Promise.resolve(connection.createChannel())
+                .then(function (channel) {
+                channel.prefetch(_this.config.prefetch);
+                return channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false })
+                    .then(function () { return channel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false }); })
+                    .then(function () { return channel.bindQueue(queueID, type.TypeID, withTopic); })
+                    .then(function () { return channel.consume(queueID, function (msg) {
+                    if (msg) {
+                        var _msg = Bus.FromSubscription(msg);
+                        if (msg.properties.type === type.TypeID) {
+                            _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
+                            var ackdOrNackd = false;
+                            handler(_msg, {
+                                ack: function () {
+                                    channel.ack(msg);
+                                    ackdOrNackd = true;
+                                },
+                                nack: function () {
+                                    if (!msg.fields.redelivered) {
+                                        channel.nack(msg);
+                                    }
+                                    else {
+                                        //can only nack once
+                                        _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                    }
+                                    ackdOrNackd = true;
+                                }
+                            });
+                            if (!ackdOrNackd)
+                                channel.ack(msg);
+                        }
+                        else {
+                            _this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
+                        }
+                    }
+                }); })
+                    .then(function (ctag) {
+                    return {
+                        cancelConsumer: function () {
+                            return channel.cancel(ctag.consumerTag)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        },
+                        deleteQueue: function () {
+                            return channel.deleteQueue(queueID)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        }
+                    };
                 });
             });
-        }).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error creating consumer: %s', failReason);
-            return null;
         });
     };
-
+    // ========== Send / Receive ==========
+    Bus.prototype.Send = function (queue, msg) {
+        var _this = this;
+        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+            return Promise.reject(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+        }
+        return this.pubChanUp
+            .then(function () { return _this.confirmSendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }); });
+    };
+    Bus.prototype.Receive = function (rxType, queue, handler) {
+        var _this = this;
+        var channel = null;
+        return this.Connection.then(function (connection) {
+            return Promise.resolve(connection.createChannel())
+                .then(function (chanReply) {
+                channel = chanReply;
+                return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
+            })
+                .then(function (okQueueReply) {
+                return channel.consume(queue, function (msg) {
+                    if (msg) {
+                        var _msg = Bus.FromSubscription(msg);
+                        if (msg.properties.type === rxType.TypeID) {
+                            _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
+                            var ackdOrNackd = false;
+                            handler(_msg, {
+                                ack: function () {
+                                    channel.ack(msg);
+                                    ackdOrNackd = true;
+                                },
+                                nack: function () {
+                                    if (!msg.fields.redelivered) {
+                                        channel.nack(msg);
+                                    }
+                                    else {
+                                        //can only nack once
+                                        _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                    }
+                                    ackdOrNackd = true;
+                                }
+                            });
+                            if (!ackdOrNackd)
+                                channel.ack(msg);
+                        }
+                        else {
+                            _this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID));
+                        }
+                    }
+                })
+                    .then(function (ctag) {
+                    return {
+                        cancelConsumer: function () {
+                            return channel.cancel(ctag.consumerTag)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        },
+                        deleteQueue: function () {
+                            return channel.deleteQueue(queue)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        }
+                    };
+                });
+            });
+        });
+    };
+    Bus.prototype.ReceiveTypes = function (queue, handlers) {
+        var _this = this;
+        var channel = null;
+        return this.Connection.then(function (connection) {
+            return Promise.resolve(connection.createChannel())
+                .then(function (chanReply) {
+                channel = chanReply;
+                return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
+            })
+                .then(function (okQueueReply) {
+                return channel.consume(queue, function (msg) {
+                    var _msg = Bus.FromSubscription(msg);
+                    handlers.filter(function (handler) { return handler.rxType.TypeID === msg.properties.type; }).forEach(function (handler) {
+                        _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
+                        var ackdOrNackd = false;
+                        handler.handler(_msg, {
+                            ack: function () {
+                                channel.ack(msg);
+                                ackdOrNackd = true;
+                            },
+                            nack: function () {
+                                if (!msg.fields.redelivered) {
+                                    channel.nack(msg);
+                                }
+                                else {
+                                    //can only nack once
+                                    _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                }
+                                ackdOrNackd = true;
+                            }
+                        });
+                        if (!ackdOrNackd)
+                            channel.ack(msg);
+                    });
+                })
+                    .then(function (ctag) {
+                    return {
+                        cancelConsumer: function () {
+                            return channel.cancel(ctag.consumerTag)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        },
+                        deleteQueue: function () {
+                            return channel.deleteQueue(queue)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        }
+                    };
+                });
+            });
+        });
+    };
     // ========== Request / Response ==========
     Bus.prototype.Request = function (request) {
         var _this = this;
-        var ackdPromise;
-        var responsePromise;
-
-        var confirmPublish = Promise.promisify(this.ConfirmChannel.publish, this.ConfirmChannel);
-
-        var consumerTag = uuid.v4();
-        var responseQueue = Bus.rpcQueueBase + consumerTag;
-
         var responseDeferred = Promise.defer();
-        var handleResponse = function (msg) {
-            //ack first
-            _this.ConfirmChannel.ack(msg);
-            _this.ConfirmChannel.cancel(consumerTag);
-            responseDeferred.resolve(Bus.FromSubscription(msg));
+        var correlationID = uuid.v4();
+        this.rpcResponseHandlers[correlationID] = {
+            deferred: responseDeferred,
+            timeoutID: setTimeout(function () {
+                delete _this.rpcResponseHandlers[correlationID];
+                throw Error('Timed-out waiting for RPC response, correlationID: ' + correlationID);
+            }, this.config.rpcTimeout || 30000)
         };
-        responsePromise = responseDeferred.promise;
-
-        ackdPromise = Promise.resolve(this.ConfirmChannel.assertQueue(responseQueue, { durable: false, exclusive: true, autoDelete: true })).then(function (okQueueReply) {
-            return _this.ConfirmChannel.consume(responseQueue, handleResponse, { consumerTag: consumerTag });
-        }).then(function (okSubscribeReply) {
-            return _this.ConfirmChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false });
-        }).then(function (okExchangeReply) {
-            return confirmPublish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: responseQueue });
-        }).then(this.handleAck, this.handleNack).catch(function (failReason) {
-            //TODO: let throw
-            console.error('[ERROR]Error requesting: %s', failReason);
-            return false;
+        this.rpcConsumerUp = this.rpcConsumerUp || this.Connection
+            .then(function (connection) { return connection.createChannel(); })
+            .then(function (channelReply) {
+            _this.Channels.rpcChannel = channelReply;
+            _this.rpcQueue = Bus.rpcQueueBase + uuid.v4();
+            return _this.Channels.rpcChannel.assertQueue(_this.rpcQueue, { durable: false, exclusive: true, autoDelete: true });
+        })
+            .then(function (okQueueReply) {
+            return _this.Channels.rpcChannel.consume(_this.rpcQueue, function (msg) {
+                if (_this.rpcResponseHandlers[msg.properties.correlationId]) {
+                    _this.Channels.rpcChannel.ack(msg);
+                    clearTimeout(_this.rpcResponseHandlers[msg.properties.correlationId].timeoutID);
+                    var _msg = Bus.FromSubscription(msg);
+                    _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
+                    _this.rpcResponseHandlers[msg.properties.correlationId].deferred.resolve(_msg);
+                    delete _this.rpcResponseHandlers[msg.properties.correlationId];
+                }
+                else {
+                }
+            });
+            return true;
+        })
+            .then(function (okSubscribeReply) {
+            _this.rpcConsumerTag = okSubscribeReply.consumerTag;
+            return true;
         });
-
-        return { ackd: ackdPromise, response: responsePromise };
+        return this.rpcConsumerUp
+            .then(function () { return _this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }); })
+            .then(function (okExchangeReply) { return _this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: _this.rpcQueue, correlationId: correlationID }); })
+            .then(function (ackd) { return responseDeferred.promise; });
     };
-
     Bus.prototype.Respond = function (rqType, rsType, responder) {
         var _this = this;
-        return Promise.resolve(this.ConfirmChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })).then(function (okExchangeReply) {
-            return Promise.resolve(_this.ConfirmChannel.assertQueue(rqType, { durable: true, exclusive: false, autoDelete: false }));
-        }).then(function (okQueueReply) {
-            return Promise.resolve(_this.ConfirmChannel.bindQueue(rqType, Bus.rpcExchange, rqType));
-        }).then(function (okBindReply) {
-            return _this.ConfirmChannel.consume(rqType, function (reqMsg) {
-                //ack first
-                _this.ConfirmChannel.ack(reqMsg);
-
-                //processing just the content
-                var payload = Bus.FromSubscription(reqMsg);
-                var replyTo = reqMsg.properties.replyTo;
-                var correlationId = reqMsg.properties.correlationId;
-                var reqType = reqMsg.properties.type;
-
-                var respMsgProm = responder(payload);
-
-                var confirmPublish = Promise.promisify(_this.ConfirmChannel.publish, _this.ConfirmChannel);
-
-                respMsgProm.then(function (respMsg) {
-                    confirmPublish('', replyTo, Bus.ToBuffer(respMsg), { type: rsType, correlationId: correlationId }).then(_this.handleAck, _this.handleNack);
-                });
-            });
-        }).catch(function (failReason) {
-            //TODO: let throw?
-            console.error('[ERROR]Error creating response queue: %s', failReason);
-            return null;
+        return this.Connection
+            .then(function (connection) { return connection.createChannel(); })
+            .then(function (responseChan) {
+            return responseChan.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })
+                .then(function (okExchangeReply) { return responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }); })
+                .then(function (okQueueReply) { return responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID); })
+                .then(function (okBindReply) { return responseChan.consume(rqType.TypeID, function (reqMsg) {
+                var msg = Bus.FromSubscription(reqMsg);
+                if (reqMsg.properties.type === rqType.TypeID) {
+                    msg.TypeID = msg.TypeID || reqMsg.properties.type; //so we can get non-BusMessage events
+                    var replyTo = reqMsg.properties.replyTo;
+                    var correlationID = reqMsg.properties.correlationId;
+                    var ackdOrNackd = false;
+                    responder(msg, {
+                        ack: function () {
+                            responseChan.ack(reqMsg);
+                            ackdOrNackd = true;
+                        },
+                        nack: function () {
+                            if (!reqMsg.fields.redelivered) {
+                                responseChan.nack(reqMsg);
+                            }
+                            else {
+                                //can only nack once
+                                _this.SendToErrorQueue(msg, 'attempted to nack previously nack\'d message');
+                            }
+                            ackdOrNackd = true;
+                        }
+                    })
+                        .then(function (response) {
+                        _this.Channels.publishChannel.publish('', replyTo, Bus.ToBuffer(response), { type: rsType.TypeID, correlationId: correlationID });
+                        if (!ackdOrNackd)
+                            responseChan.ack(reqMsg);
+                    });
+                }
+                else {
+                    _this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID));
+                }
+            })
+                .then(function (ctag) {
+                return {
+                    cancelConsumer: function () {
+                        return responseChan.cancel(ctag.consumerTag)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
+                    },
+                    deleteQueue: function () {
+                        return responseChan.deleteQueue(rqType.TypeID)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
+                    }
+                };
+            }); });
         });
     };
-
+    // ========== Etc  ==========
+    Bus.ToBuffer = function (obj) {
+        Bus.remove$type(obj);
+        return new Buffer(JSON.stringify(obj));
+    };
+    Bus.FromSubscription = function (obj) {
+        //fields: "{"consumerTag":"amq.ctag-QreMJ-zvC07EW2EKtWZhmQ","deliveryTag":1,"redelivered":false,"exchange":"","routingKey":"easynetq.response.0303b47c-2229-4557-9218-30c99c67f8c9"}"
+        //props:  "{"headers":{},"deliveryMode":1,"correlationId":"14ac579e-048b-4c30-b909-50841cce3e44","type":"Common.TestMessageRequestAddValueResponse:Findly"}"
+        var msg = JSON.parse(obj.content.toString());
+        Bus.remove$type(msg);
+        return msg;
+    };
     // ========== Extended ==========
     Bus.prototype.CancelConsumer = function (consumerTag) {
-        return Promise.resolve(this.ConfirmChannel.cancel(consumerTag));
+        return Promise.resolve(this.Channels.publishChannel.cancel(consumerTag));
     };
-
     Bus.prototype.DeleteExchange = function (exchange, ifUnused) {
-        if (typeof ifUnused === "undefined") { ifUnused = false; }
-        this.ConfirmChannel.deleteExchange(exchange, { ifUnused: ifUnused });
+        if (ifUnused === void 0) { ifUnused = false; }
+        this.Channels.publishChannel.deleteExchange(exchange, { ifUnused: ifUnused });
     };
-
     Bus.prototype.DeleteQueue = function (queue, ifUnused, ifEmpty) {
-        if (typeof ifUnused === "undefined") { ifUnused = false; }
-        if (typeof ifEmpty === "undefined") { ifEmpty = false; }
-        return Promise.resolve(this.ConfirmChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
+        if (ifUnused === void 0) { ifUnused = false; }
+        if (ifEmpty === void 0) { ifEmpty = false; }
+        return Promise.resolve(this.Channels.publishChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
     };
-
+    Bus.prototype.DeleteQueueUnconditional = function (queue) {
+        return Promise.resolve(this.Channels.publishChannel.deleteQueue(queue));
+    };
     Bus.prototype.QueueStatus = function (queue) {
-        return Promise.resolve(this.ConfirmChannel.checkQueue(queue));
+        return Promise.resolve(this.Channels.publishChannel.checkQueue(queue));
     };
-    Bus.rpcQueueBase = 'easynetq.response.';
     Bus.rpcExchange = 'easy_net_q_rpc';
+    Bus.rpcQueueBase = 'easynetq.response.';
+    Bus.defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
+    Bus.remove$type = function (obj) {
+        try {
+            delete obj.$type;
+            var o;
+            for (o in obj) {
+                if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o]))
+                    Bus.remove$type(obj[o]);
+            }
+        }
+        catch (e) {
+            console.error('[Bus gulping error: %s]', e.message);
+        }
+    };
     return Bus;
 })();
 exports.Bus = Bus;

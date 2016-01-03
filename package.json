@@ -1,0 +1,15 @@
+{
+  "name": "NodejsConsoleApp1",
+  "version": "0.0.0",
+  "description": "NodejsConsoleApp1",
+  "main": "app.js",
+  "author": {
+    "name": "Michael Haan",
+    "email": ""
+  },
+  "dependencies": {
+    "amqplib": "^0.4.0",
+    "bluebird": "^3.0.2",
+    "node-uuid": "^1.4.3"
+  }
+}
