@@ -2,7 +2,6 @@ var util = require('util');
 var amqp = require('amqplib');
 var Promise = require('bluebird');
 var uuid = require('node-uuid');
-var Common = require('../OpenTable.Messages.TS/Common');
 var RabbitHutch = (function () {
     function RabbitHutch() {
     }
@@ -29,8 +28,6 @@ var Bus = (function () {
                 .then(function (connection) { return connection.createConfirmChannel(); })
                 .then(function (confChanReply) {
                 _this.Channels.publishChannel = confChanReply;
-                //this.confirmSendToQueue = <(queue: string, content: NodeBuffer, options: { type: string }) => Promise<boolean>>Promise.promisify(this.Channels.publishChannel.sendToQueue, this.Channels.publishChannel);
-                _this.confirmSendToQueue = _this.Channels.publishChannel.sendToQueue;
                 return true;
             });
         }
@@ -43,9 +40,15 @@ var Bus = (function () {
         var _this = this;
         if (err === void 0) { err = ''; }
         if (stack === void 0) { stack = ''; }
+        var errMsg = {
+            TypeID: 'Common.ErrorMessage:Messages',
+            Message: msg === void 0 ? null : JSON.stringify(msg),
+            Error: err === void 0 ? null : err,
+            Stack: stack === void 0 ? null : stack
+        };
         return this.pubChanUp
             .then(function () { return _this.Channels.publishChannel.assertQueue(Bus.defaultErrorQueue, { durable: true, exclusive: false, autoDelete: false }); })
-            .then(function () { return _this.Send(Bus.defaultErrorQueue, new Common.ErrorMessage(JSON.stringify(msg), err, stack)); });
+            .then(function () { return _this.Send(Bus.defaultErrorQueue, errMsg); });
     };
     // ========== Publish / Subscribe ==========
     Bus.prototype.Publish = function (msg, withTopic) {
@@ -126,7 +129,7 @@ var Bus = (function () {
             return Promise.reject(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
         }
         return this.pubChanUp
-            .then(function () { return _this.confirmSendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }); });
+            .then(function () { return _this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }); });
     };
     Bus.prototype.Receive = function (rxType, queue, handler) {
         var _this = this;

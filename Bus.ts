@@ -2,7 +2,7 @@
 var amqp = require('amqplib');
 import Promise = require('bluebird');
 var uuid = require('node-uuid');
-import Common = require('../OpenTable.Messages.TS/Common');
+
 
 export class RabbitHutch {
     public static CreateBus(config: IBusConfig): IBus {
@@ -30,8 +30,6 @@ export class Bus implements IExtendedBus {
     private pubChanUp: Promise<boolean>;
     private rpcConsumerUp: Promise<boolean>;
 
-    private confirmSendToQueue: (queue: string, content: NodeBuffer, options: { type: string }) => Promise<boolean>;
-
     private static remove$type = (obj) => {
         try {
             delete obj.$type;
@@ -46,10 +44,17 @@ export class Bus implements IExtendedBus {
     }
 
     // TODO: handle error for msg (can't stringify error)
-    public SendToErrorQueue(msg: any, err:string = '', stack: string = '') {
+    public SendToErrorQueue(msg: any, err: string = '', stack: string = '') {
+        var errMsg = {
+            TypeID: 'Common.ErrorMessage:Messages',
+            Message: msg === void 0 ? null : JSON.stringify(msg),
+            Error: err === void 0 ? null : err,
+            Stack: stack === void 0 ? null : stack
+        };
+
         return this.pubChanUp
             .then(() => this.Channels.publishChannel.assertQueue(Bus.defaultErrorQueue, { durable: true, exclusive: false, autoDelete: false }))
-            .then(() => this.Send(Bus.defaultErrorQueue, new Common.ErrorMessage(JSON.stringify(msg), err, stack)));
+            .then(() => this.Send(Bus.defaultErrorQueue, errMsg));
     }
 
     constructor(public config: IBusConfig) {
@@ -60,8 +65,6 @@ export class Bus implements IExtendedBus {
                 .then((connection) => connection.createConfirmChannel())
                 .then((confChanReply) => {
                     this.Channels.publishChannel = confChanReply;
-                    //this.confirmSendToQueue = <(queue: string, content: NodeBuffer, options: { type: string }) => Promise<boolean>>Promise.promisify(this.Channels.publishChannel.sendToQueue, this.Channels.publishChannel);
-                    this.confirmSendToQueue = this.Channels.publishChannel.sendToQueue;
                     return true;
                 });
         }
@@ -159,7 +162,7 @@ export class Bus implements IExtendedBus {
         }
 
         return this.pubChanUp
-            .then(() => this.confirmSendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }));
+            .then(() => this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }));
     }
 
     public Receive(
