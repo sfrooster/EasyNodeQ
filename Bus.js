@@ -67,6 +67,9 @@ var Bus = (function () {
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
             return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
         }
+        if (typeof handler !== 'function') {
+            return Promise.reject('xyz is not a valid function');
+        }
         var queueID = type.TypeID + '_' + subscriberName;
         return this.Connection.then(function (connection) {
             return Promise.resolve(connection.createChannel())

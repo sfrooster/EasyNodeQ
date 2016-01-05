@@ -95,6 +95,10 @@ export class Bus implements IExtendedBus {
             return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
         }
 
+        if (typeof handler !== 'function') {
+            return Promise.reject('xyz is not a valid function');
+        }
+
         var queueID = type.TypeID + '_' + subscriberName;
 
         return this.Connection.then((connection) => {
