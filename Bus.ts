@@ -349,6 +349,69 @@ export class Bus implements IExtendedBus {
     public Respond(
         rqType: { TypeID: string },
         rsType: { TypeID: string },
+        responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => { TypeID: string }):
+        Promise<IConsumerDispose> {
+        return this.Connection
+            .then((connection) => connection.createChannel())
+            .then((responseChan) => {
+                return responseChan.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })
+                    .then((okExchangeReply) => responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }))
+                    .then((okQueueReply) => responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID))
+                    .then((okBindReply) => responseChan.consume(rqType.TypeID, (reqMsg: IPublishedObj) => {
+                        var msg = Bus.FromSubscription(reqMsg);
+
+                        if (reqMsg.properties.type === rqType.TypeID) {
+                            msg.TypeID = msg.TypeID || reqMsg.properties.type;  //so we can get non-BusMessage events
+
+                            var replyTo = reqMsg.properties.replyTo;
+                            var correlationID = reqMsg.properties.correlationId;
+
+                            var ackdOrNackd = false;
+
+                            var response = responder(msg, {
+                                ack: () => {
+                                    responseChan.ack(reqMsg);
+                                    ackdOrNackd = true;
+                                },
+                                nack: () => {
+                                    if (!reqMsg.fields.redelivered) {
+                                        responseChan.nack(reqMsg);
+                                    }
+                                    else {
+                                        //can only nack once
+                                        this.SendToErrorQueue(msg, 'attempted to nack previously nack\'d message');
+                                    }
+                                    ackdOrNackd = true;
+                                }
+                            });
+
+                            this.Channels.publishChannel.publish('', replyTo, Bus.ToBuffer(response), { type: rsType.TypeID, correlationId: correlationID });
+                            if (!ackdOrNackd) responseChan.ack(reqMsg);
+                        }
+                        else {
+                            this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID))
+                        }
+                    })
+                        .then((ctag) => {
+                            return {
+                                cancelConsumer: () => {
+                                    return responseChan.cancel(ctag.consumerTag)
+                                        .then(() => true)
+                                        .catch(() => false);
+                                },
+                                deleteQueue: () => {
+                                    return responseChan.deleteQueue(rqType.TypeID)
+                                        .then(() => true)
+                                        .catch(() => false);
+                                }
+                            }
+                        }))
+            });
+    }
+
+    public RespondAsync(
+        rqType: { TypeID: string },
+        rsType: { TypeID: string },
         responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => Promise<{ TypeID: string }>):
         Promise<IConsumerDispose>
     {
@@ -457,7 +520,8 @@ export interface IBus {
     ReceiveTypes(queue: string, handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]): Promise<IConsumerDispose>;
 
     Request(request: { TypeID: string }): Promise<{ TypeID: string }>;
-    Respond(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => Promise<{ TypeID: string }>): Promise<IConsumerDispose>
+    Respond(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => { TypeID: string }): Promise<IConsumerDispose>
+    RespondAsync(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => Promise<{ TypeID: string }>): Promise<IConsumerDispose>
 
     SendToErrorQueue(msg: any, err?: string, stack?: string): void;
 }

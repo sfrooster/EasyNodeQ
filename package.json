@@ -1,11 +1,11 @@
 {
-  "name": "NodejsConsoleApp1",
-  "version": "0.0.0",
-  "description": "NodejsConsoleApp1",
-  "main": "app.js",
+  "name": "EasyNodeQ",
+  "version": "0.0.1",
+  "description": "NodeJS implementation of EasyNetQ",
+  "main": "Bus.js",
   "author": {
     "name": "Michael Haan",
-    "email": ""
+    "email": "haanmd@gmail.com"
   },
   "dependencies": {
     "amqplib": "^0.4.0",

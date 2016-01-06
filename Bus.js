@@ -301,6 +301,61 @@ var Bus = (function () {
                     var replyTo = reqMsg.properties.replyTo;
                     var correlationID = reqMsg.properties.correlationId;
                     var ackdOrNackd = false;
+                    var response = responder(msg, {
+                        ack: function () {
+                            responseChan.ack(reqMsg);
+                            ackdOrNackd = true;
+                        },
+                        nack: function () {
+                            if (!reqMsg.fields.redelivered) {
+                                responseChan.nack(reqMsg);
+                            }
+                            else {
+                                //can only nack once
+                                _this.SendToErrorQueue(msg, 'attempted to nack previously nack\'d message');
+                            }
+                            ackdOrNackd = true;
+                        }
+                    });
+                    _this.Channels.publishChannel.publish('', replyTo, Bus.ToBuffer(response), { type: rsType.TypeID, correlationId: correlationID });
+                    if (!ackdOrNackd)
+                        responseChan.ack(reqMsg);
+                }
+                else {
+                    _this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID));
+                }
+            })
+                .then(function (ctag) {
+                return {
+                    cancelConsumer: function () {
+                        return responseChan.cancel(ctag.consumerTag)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
+                    },
+                    deleteQueue: function () {
+                        return responseChan.deleteQueue(rqType.TypeID)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
+                    }
+                };
+            }); });
+        });
+    };
+    Bus.prototype.RespondAsync = function (rqType, rsType, responder) {
+        var _this = this;
+        return this.Connection
+            .then(function (connection) { return connection.createChannel(); })
+            .then(function (responseChan) {
+            return responseChan.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })
+                .then(function (okExchangeReply) { return responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }); })
+                .then(function (okQueueReply) { return responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID); })
+                .then(function (okBindReply) { return responseChan.consume(rqType.TypeID, function (reqMsg) {
+                var msg = Bus.FromSubscription(reqMsg);
+                if (reqMsg.properties.type === rqType.TypeID) {
+                    msg.TypeID = msg.TypeID || reqMsg.properties.type; //so we can get non-BusMessage events
+                    var replyTo = reqMsg.properties.replyTo;
+                    var correlationID = reqMsg.properties.correlationId;
+                    var ackdOrNackd = false;
                     responder(msg, {
                         ack: function () {
                             responseChan.ack(reqMsg);
