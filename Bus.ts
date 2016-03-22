@@ -332,8 +332,6 @@ export class Bus implements IExtendedBus {
                         //ignore it?
                     }
                 });
-
-                return true;
             })
             .then((okSubscribeReply) => {
                 this.rpcConsumerTag = okSubscribeReply.consumerTag;
