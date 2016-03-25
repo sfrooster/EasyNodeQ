@@ -2,7 +2,6 @@
   "ambientDependencies": {
     "bluebird": "registry:dt/bluebird#2.0.0+20160319051630",
     "node": "registry:dt/node#4.0.0+20160319033040",
-    "node-uuid": "registry:dt/node-uuid#0.0.0+20160316155526",
     "require": "registry:dt/require#2.1.20+20160316155526"
   },
   "dependencies": {
