@@ -1,6 +1,4 @@
-///<reference path='./typings/main/ambient/node/index.d.ts' />
-///<reference path='./typings/main/ambient/bluebird/index.d.ts' />
-///<reference path='./typings/main/definitions/node-uuid/index.d.ts' />
+///<reference path='./typings/main.d.ts' />
 "use strict";
 const util = require('util');
 var amqp = require('amqplib');
