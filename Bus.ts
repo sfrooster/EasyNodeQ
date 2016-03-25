@@ -1,7 +1,12 @@
-﻿import util = require('util');
+﻿///<reference path='./typings/main/ambient/node/index.d.ts' />
+///<reference path='./typings/main/ambient/bluebird/index.d.ts' />
+///<reference path='./typings/main/definitions/node-uuid/index.d.ts' />
+
+
+import util = require('util');
 var amqp = require('amqplib');
 import Promise = require('bluebird');
-var uuid = require('node-uuid');
+import uuid = require('node-uuid');
 
 
 export class RabbitHutch {
