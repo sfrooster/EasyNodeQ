@@ -1,6 +1,6 @@
 {
-  "name": "EasyNodeQ",
-  "version": "0.0.1",
+  "name": "easynodeq",
+  "version": "0.1.0",
   "description": "NodeJS implementation of EasyNetQ",
   "main": "Bus.js",
   "scripts": {
@@ -8,6 +8,10 @@
     "build": "tsc --target ES6 --module commonjs --moduleResolution node --sourceMap Bus.ts",
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/sfrooster/EasyNodeQ.git"
   },
   "author": {
     "name": "Michael Haan",
