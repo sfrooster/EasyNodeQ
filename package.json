@@ -5,7 +5,7 @@
   "main": "Bus.js",
   "typings": "Bus",
   "scripts": {
-    "prebuild": "npm install",
+    "prebuild": "npm install && typings install",
     "build": "tsc --target ES6 --module commonjs --moduleResolution node --sourceMap Bus.ts",
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -2,7 +2,7 @@
 
 
 import util = require('util');
-var amqp = require('amqplib');
+import amqp = require('amqplib');
 import Promise = require('bluebird');
 import uuid = require('node-uuid');
 
