@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "NodeJS implementation of EasyNetQ",
   "main": "Bus.js",
+  "typings": "Bus",
   "scripts": {
     "prebuild": "npm install",
     "build": "tsc --target ES6 --module commonjs --moduleResolution node --sourceMap Bus.ts",
