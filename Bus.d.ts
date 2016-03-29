@@ -1,5 +1,3 @@
-
-import Promise = require('bluebird');
 export declare class RabbitHutch {
     static CreateBus(config: IBusConfig): IBus;
 }

@@ -1,7 +1,7 @@
 ///<reference path='./typings/main.d.ts' />
 "use strict";
 const util = require('util');
-var amqp = require('amqplib');
+const amqp = require('amqplib');
 const Promise = require('bluebird');
 const uuid = require('node-uuid');
 class RabbitHutch {
