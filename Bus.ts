@@ -300,11 +300,17 @@ export class Bus implements IExtendedBus {
 
     // ========== Request / Response ==========
     public Request(request: { TypeID: string }): Promise<any> {
-        var responseDeferred = Promise.defer<any>();
+        let resolver;
+        let rejecter;
+        var responsePromise = new Promise<any>((resolve, reject) => {
+            resolver = resolve;
+            rejecter = reject;
+        });
         var correlationID = uuid.v4();
 
         this.rpcResponseHandlers[correlationID] = {
-            deferred: responseDeferred,
+            resolver: resolver,
+            rejecter: rejecter,
             timeoutID: setTimeout(() => {
                 delete this.rpcResponseHandlers[correlationID];
                 throw Error('Timed-out waiting for RPC response, correlationID: ' + correlationID);
@@ -327,8 +333,8 @@ export class Bus implements IExtendedBus {
 
                         var _msg = Bus.FromSubscription(msg);
                         _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
-
-                        this.rpcResponseHandlers[msg.properties.correlationId].deferred.resolve(_msg);
+                        debugger;
+                        this.rpcResponseHandlers[msg.properties.correlationId].resolver(_msg);
                         delete this.rpcResponseHandlers[msg.properties.correlationId];
                     }
                     else {
@@ -344,7 +350,7 @@ export class Bus implements IExtendedBus {
         return this.rpcConsumerUp
             .then(() => this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }))
             .then((okExchangeReply) => this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: this.rpcQueue, correlationId: correlationID }))
-            .then((ackd) => responseDeferred.promise);
+            .then((ackd) => responsePromise);
     }
 
     public Respond(

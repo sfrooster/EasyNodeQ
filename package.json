@@ -1,12 +1,12 @@
 {
   "name": "easynodeq",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "NodeJS implementation of EasyNetQ",
   "main": "Bus.js",
   "typings": "Bus",
   "scripts": {
     "prebuild": "npm install && typings install",
-    "build": "tsc --target ES5 --module commonjs --moduleResolution node --sourceMap Bus.ts",
+    "build": "tsc --target ES5 --module commonjs --moduleResolution node --sourceMap Bus.ts test.ts",
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

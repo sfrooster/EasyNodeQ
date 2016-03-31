@@ -248,10 +248,16 @@ var Bus = (function () {
     // ========== Request / Response ==========
     Bus.prototype.Request = function (request) {
         var _this = this;
-        var responseDeferred = Promise.defer();
+        var resolver;
+        var rejecter;
+        var responsePromise = new Promise(function (resolve, reject) {
+            resolver = resolve;
+            rejecter = reject;
+        });
         var correlationID = uuid.v4();
         this.rpcResponseHandlers[correlationID] = {
-            deferred: responseDeferred,
+            resolver: resolver,
+            rejecter: rejecter,
             timeoutID: setTimeout(function () {
                 delete _this.rpcResponseHandlers[correlationID];
                 throw Error('Timed-out waiting for RPC response, correlationID: ' + correlationID);
@@ -271,7 +277,8 @@ var Bus = (function () {
                     clearTimeout(_this.rpcResponseHandlers[msg.properties.correlationId].timeoutID);
                     var _msg = Bus.FromSubscription(msg);
                     _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                    _this.rpcResponseHandlers[msg.properties.correlationId].deferred.resolve(_msg);
+                    debugger;
+                    _this.rpcResponseHandlers[msg.properties.correlationId].resolver(_msg);
                     delete _this.rpcResponseHandlers[msg.properties.correlationId];
                 }
                 else {
@@ -285,7 +292,7 @@ var Bus = (function () {
         return this.rpcConsumerUp
             .then(function () { return _this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }); })
             .then(function (okExchangeReply) { return _this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: _this.rpcQueue, correlationId: correlationID }); })
-            .then(function (ackd) { return responseDeferred.promise; });
+            .then(function (ackd) { return responsePromise; });
     };
     Bus.prototype.Respond = function (rqType, rsType, responder) {
         var _this = this;
