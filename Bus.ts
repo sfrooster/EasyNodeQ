@@ -333,7 +333,6 @@ export class Bus implements IExtendedBus {
 
                         var _msg = Bus.FromSubscription(msg);
                         _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
-                        debugger;
                         this.rpcResponseHandlers[msg.properties.correlationId].resolver(_msg);
                         delete this.rpcResponseHandlers[msg.properties.correlationId];
                     }

@@ -277,7 +277,6 @@ var Bus = (function () {
                     clearTimeout(_this.rpcResponseHandlers[msg.properties.correlationId].timeoutID);
                     var _msg = Bus.FromSubscription(msg);
                     _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                    debugger;
                     _this.rpcResponseHandlers[msg.properties.correlationId].resolver(_msg);
                     delete _this.rpcResponseHandlers[msg.properties.correlationId];
                 }
