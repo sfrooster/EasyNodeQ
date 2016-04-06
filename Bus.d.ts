@@ -1,3 +1,5 @@
+/// <reference path="typings/main.d.ts" />
+import Promise = require('bluebird');
 export declare class RabbitHutch {
     static CreateBus(config: IBusConfig): IBus;
 }

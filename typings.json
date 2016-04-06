@@ -5,7 +5,7 @@
     "when": "registry:dt/when#2.4.0+20160317120654"
   },
   "dependencies": {
-    "bluebird": "registry:npm/bluebird#3.2.1+20160211005852",
+    "bluebird": "registry:npm/bluebird#3.3.4+20160406213700",
     "node-uuid": "registry:npm/node-uuid#1.4.0+20160224202522"
   }
 }
