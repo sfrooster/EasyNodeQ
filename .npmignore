@@ -1,1 +1,11 @@
+node_modules/
+.vscode/
+typings/
+
 Bus.ts
+
+Bus.js.map
+tsconfig.json
+
+test.*
+

@@ -1,6 +1,8 @@
 node_modules/
 .vscode/
 typings/
+
 Bus.js.map
 tsconfig.json
+
 test.*
