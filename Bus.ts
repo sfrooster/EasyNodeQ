@@ -33,12 +33,14 @@ export class Bus implements IExtendedBus {
     private pubChanUp: Promise<boolean>;
     private rpcConsumerUp: Promise<boolean>;
 
-    private static remove$type = (obj) => {
+    private static remove$type = (obj, recurse:boolean = true) => {
         try {
             delete obj.$type;
             var o;
-            for (o in obj) {
-                if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o])) Bus.remove$type(obj[o]);
+            if (recurse) {
+                for (o in obj) {
+                    if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o])) Bus.remove$type(obj[o]);
+                }
             }
         }
         catch (e) {
@@ -483,7 +485,7 @@ export class Bus implements IExtendedBus {
 
     // ========== Etc  ==========
     public static ToBuffer(obj: any): NodeBuffer {
-        Bus.remove$type(obj);
+        Bus.remove$type(obj, false);
         return new Buffer(JSON.stringify(obj));
     }
 

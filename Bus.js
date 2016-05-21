@@ -407,7 +407,7 @@ var Bus = (function () {
     };
     // ========== Etc  ==========
     Bus.ToBuffer = function (obj) {
-        Bus.remove$type(obj);
+        Bus.remove$type(obj, false);
         return new Buffer(JSON.stringify(obj));
     };
     Bus.FromSubscription = function (obj) {
@@ -439,13 +439,16 @@ var Bus = (function () {
     Bus.rpcExchange = 'easy_net_q_rpc';
     Bus.rpcQueueBase = 'easynetq.response.';
     Bus.defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
-    Bus.remove$type = function (obj) {
+    Bus.remove$type = function (obj, recurse) {
+        if (recurse === void 0) { recurse = true; }
         try {
             delete obj.$type;
             var o;
-            for (o in obj) {
-                if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o]))
-                    Bus.remove$type(obj[o]);
+            if (recurse) {
+                for (o in obj) {
+                    if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o]))
+                        Bus.remove$type(obj[o]);
+                }
             }
         }
         catch (e) {
