@@ -1,10 +1,7 @@
-﻿///<reference path='./typings/main.d.ts' />
-
-
-import util = require('util');
-import amqp = require('amqplib');
-import Promise = require('bluebird');
-import uuid = require('node-uuid');
+﻿import * as util from 'util';
+import * as amqp from 'amqplib';
+import * as bbPromise from 'bluebird';
+import * as uuid from 'node-uuid';
 
 
 export class RabbitHutch {
@@ -20,9 +17,9 @@ export class Bus implements IExtendedBus {
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
     
-    private Connection: Promise<any>;
+    private Connection: bbPromise<any>;
     private rpcQueue = null;
-    private rpcConsumerTag: Promise<IQueueConsumeReply>;
+    private rpcConsumerTag: bbPromise<IQueueConsumeReply>;
     private rpcResponseHandlers = {};
 
     private Channels: { publishChannel: any; rpcChannel: any; } = {
@@ -30,8 +27,8 @@ export class Bus implements IExtendedBus {
         rpcChannel: null
     }
 
-    private pubChanUp: Promise<boolean>;
-    private rpcConsumerUp: Promise<boolean>;
+    private pubChanUp: bbPromise<boolean>;
+    private rpcConsumerUp: bbPromise<boolean>;
 
     private static remove$type = (obj, recurse:boolean = true) => {
         try {
@@ -64,7 +61,7 @@ export class Bus implements IExtendedBus {
 
     constructor(public config: IBusConfig) {
         try {
-            this.Connection = Promise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.Connection = bbPromise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
 
             this.pubChanUp = this.Connection
                 .then((connection) => connection.createConfirmChannel())
@@ -79,9 +76,9 @@ export class Bus implements IExtendedBus {
     }
 
     // ========== Publish / Subscribe ==========
-    public Publish(msg: { TypeID: string }, withTopic:string = ''): Promise<boolean> {
+    public Publish(msg: { TypeID: string }, withTopic:string = ''): bbPromise<boolean> {
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return Promise.reject<boolean>(util.format('%s is not a valid TypeID', msg.TypeID));
+            return bbPromise.reject<boolean>(util.format('%s is not a valid TypeID', msg.TypeID));
         }
 
         return this.pubChanUp
@@ -94,20 +91,20 @@ export class Bus implements IExtendedBus {
         subscriberName: string,
         handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void,
         withTopic: string = '#'):
-        Promise<IConsumerDispose>
+        bbPromise<IConsumerDispose>
     {
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
-            return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+            return bbPromise.reject(util.format('%s is not a valid TypeID', type.TypeID));
         }
 
         if (typeof handler !== 'function') {
-            return Promise.reject('xyz is not a valid function');
+            return bbPromise.reject('xyz is not a valid function');
         }
 
         var queueID = type.TypeID + '_' + subscriberName;
 
         return this.Connection.then((connection) => {
-            return Promise.resolve(connection.createChannel())
+            return bbPromise.resolve(connection.createChannel())
                 .then((channel) => {
                     channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false })
@@ -165,9 +162,9 @@ export class Bus implements IExtendedBus {
     }
 
     // ========== Send / Receive ==========
-    public Send(queue: string, msg: { TypeID: string }): Promise<boolean> {
+    public Send(queue: string, msg: { TypeID: string }): bbPromise<boolean> {
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return Promise.reject<boolean>(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+            return bbPromise.reject<boolean>(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
         }
 
         return this.pubChanUp
@@ -178,12 +175,12 @@ export class Bus implements IExtendedBus {
         rxType: { TypeID: string },
         queue: string,
         handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void):
-        Promise<IConsumerDispose>
+        bbPromise<IConsumerDispose>
     {
         var channel = null;
 
         return this.Connection.then((connection) => {
-            return Promise.resolve(connection.createChannel())
+            return bbPromise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
@@ -243,12 +240,12 @@ export class Bus implements IExtendedBus {
     public ReceiveTypes(
         queue: string,
         handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]):
-        Promise<IConsumerDispose>
+        bbPromise<IConsumerDispose>
     {
         var channel = null;
 
         return this.Connection.then((connection) => {
-            return Promise.resolve(connection.createChannel())
+            return bbPromise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
@@ -301,10 +298,10 @@ export class Bus implements IExtendedBus {
 
 
     // ========== Request / Response ==========
-    public Request(request: { TypeID: string }): Promise<any> {
+    public Request(request: { TypeID: string }): bbPromise<any> {
         let resolver;
         let rejecter;
-        var responsePromise = new Promise<any>((resolve, reject) => {
+        var responsebbPromise = new bbPromise<any>((resolve, reject) => {
             resolver = resolve;
             rejecter = reject;
         });
@@ -351,14 +348,14 @@ export class Bus implements IExtendedBus {
         return this.rpcConsumerUp
             .then(() => this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }))
             .then((okExchangeReply) => this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: this.rpcQueue, correlationId: correlationID }))
-            .then((ackd) => responsePromise);
+            .then((ackd) => responsebbPromise);
     }
 
     public Respond(
         rqType: { TypeID: string },
         rsType: { TypeID: string },
         responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => { TypeID: string }):
-        Promise<IConsumerDispose> {
+        bbPromise<IConsumerDispose> {
         return this.Connection
             .then((connection) => connection.createChannel())
             .then((responseChan) => {
@@ -420,8 +417,8 @@ export class Bus implements IExtendedBus {
     public RespondAsync(
         rqType: { TypeID: string },
         rsType: { TypeID: string },
-        responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => Promise<{ TypeID: string }>):
-        Promise<IConsumerDispose>
+        responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => bbPromise<{ TypeID: string }>):
+        bbPromise<IConsumerDispose>
     {
         return this.Connection
             .then((connection) => connection.createChannel())
@@ -484,12 +481,12 @@ export class Bus implements IExtendedBus {
 
 
     // ========== Etc  ==========
-    public static ToBuffer(obj: any): NodeBuffer {
+    private static ToBuffer(obj: any): NodeBuffer {
         Bus.remove$type(obj, false);
         return new Buffer(JSON.stringify(obj));
     }
 
-    public static FromSubscription(obj: IPublishedObj): any {
+    private static FromSubscription(obj: IPublishedObj): any {
         //fields: "{"consumerTag":"amq.ctag-QreMJ-zvC07EW2EKtWZhmQ","deliveryTag":1,"redelivered":false,"exchange":"","routingKey":"easynetq.response.0303b47c-2229-4557-9218-30c99c67f8c9"}"
         //props:  "{"headers":{},"deliveryMode":1,"correlationId":"14ac579e-048b-4c30-b909-50841cce3e44","type":"Common.TestMessageRequestAddValueResponse:Findly"}"
         var msg = JSON.parse(obj.content.toString());
@@ -498,38 +495,38 @@ export class Bus implements IExtendedBus {
     }
 
     // ========== Extended ==========
-    public CancelConsumer(consumerTag: string): Promise<IQueueConsumeReply> {
-        return Promise.resolve<IQueueConsumeReply>(this.Channels.publishChannel.cancel(consumerTag));
+    public CancelConsumer(consumerTag: string): bbPromise<IQueueConsumeReply> {
+        return bbPromise.resolve<IQueueConsumeReply>(this.Channels.publishChannel.cancel(consumerTag));
     }
 
     public DeleteExchange(exchange: string, ifUnused: boolean = false): void {
         this.Channels.publishChannel.deleteExchange(exchange, { ifUnused: ifUnused });
     }
 
-    public DeleteQueue(queue: string, ifUnused: boolean = false, ifEmpty: boolean = false): Promise<{ messageCount: number }> {
-        return Promise.resolve<{ messageCount: number }>(this.Channels.publishChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
+    public DeleteQueue(queue: string, ifUnused: boolean = false, ifEmpty: boolean = false): bbPromise<{ messageCount: number }> {
+        return bbPromise.resolve<{ messageCount: number }>(this.Channels.publishChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
     }
 
-    public DeleteQueueUnconditional(queue: string): Promise<{ messageCount: number }> {
-        return Promise.resolve<{ messageCount: number }>(this.Channels.publishChannel.deleteQueue(queue));
+    public DeleteQueueUnconditional(queue: string): bbPromise<{ messageCount: number }> {
+        return bbPromise.resolve<{ messageCount: number }>(this.Channels.publishChannel.deleteQueue(queue));
     }
 
-    public QueueStatus(queue: string): Promise<{ queue: string; messageCount: number; consumerCount: number; }> {
-        return Promise.resolve<{ queue: string; messageCount: number; consumerCount: number; }>(this.Channels.publishChannel.checkQueue(queue));
+    public QueueStatus(queue: string): bbPromise<{ queue: string; messageCount: number; consumerCount: number; }> {
+        return bbPromise.resolve<{ queue: string; messageCount: number; consumerCount: number; }>(this.Channels.publishChannel.checkQueue(queue));
     }
 }
 
 export interface IBus {
-    Publish(msg: { TypeID: string }, withTopic?: string): Promise<boolean>;
-    Subscribe(type: { TypeID: string }, subscriberName: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void, withTopic?:string): Promise<IConsumerDispose>;
+    Publish(msg: { TypeID: string }, withTopic?: string): bbPromise<boolean>;
+    Subscribe(type: { TypeID: string }, subscriberName: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void, withTopic?:string): bbPromise<IConsumerDispose>;
 
-    Send(queue: string, msg: { TypeID: string }): Promise<boolean>;
-    Receive(rxType: { TypeID: string }, queue: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void): Promise<IConsumerDispose>;
-    ReceiveTypes(queue: string, handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]): Promise<IConsumerDispose>;
+    Send(queue: string, msg: { TypeID: string }): bbPromise<boolean>;
+    Receive(rxType: { TypeID: string }, queue: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void): bbPromise<IConsumerDispose>;
+    ReceiveTypes(queue: string, handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]): bbPromise<IConsumerDispose>;
 
-    Request(request: { TypeID: string }): Promise<{ TypeID: string }>;
-    Respond(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => { TypeID: string }): Promise<IConsumerDispose>
-    RespondAsync(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => Promise<{ TypeID: string }>): Promise<IConsumerDispose>
+    Request(request: { TypeID: string }): bbPromise<{ TypeID: string }>;
+    Respond(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => { TypeID: string }): bbPromise<IConsumerDispose>
+    RespondAsync(rqType: { TypeID: string }, rsType: { TypeID: string }, responder: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => bbPromise<{ TypeID: string }>): bbPromise<IConsumerDispose>
 
     SendToErrorQueue(msg: any, err?: string, stack?: string): void;
 }
@@ -543,14 +540,14 @@ export interface IBusConfig {
 }
 
 export interface IExtendedBus extends IBus {
-    CancelConsumer(consumerTag: string): Promise<IQueueConsumeReply>;
+    CancelConsumer(consumerTag: string): bbPromise<IQueueConsumeReply>;
     DeleteExchange(exchange: string, ifUnused: boolean): void;
-    DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): Promise<{ messageCount: number }>;
-    DeleteQueueUnconditional(queue: string): Promise<{ messageCount: number }>;
-    QueueStatus(queue: string): Promise<{ queue: string; messageCount: number; consumerCount: number; }>;
+    DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): bbPromise<{ messageCount: number }>;
+    DeleteQueueUnconditional(queue: string): bbPromise<{ messageCount: number }>;
+    QueueStatus(queue: string): bbPromise<{ queue: string; messageCount: number; consumerCount: number; }>;
 }
 
-export interface IPublishedObj {
+interface IPublishedObj {
     content: NodeBuffer;
     fields: any;
     properties: any;
@@ -561,6 +558,6 @@ export interface IQueueConsumeReply {
 }
 
 export interface IConsumerDispose {
-    cancelConsumer: () => Promise<boolean>;
-    deleteQueue: () => Promise<boolean>;
+    cancelConsumer: () => bbPromise<boolean>;
+    deleteQueue: () => bbPromise<boolean>;
 }

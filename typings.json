@@ -1,11 +1,11 @@
 {
-  "ambientDependencies": {
-    "amqplib": "github:DefinitelyTyped/DefinitelyTyped/amqplib/amqplib.d.ts#7de6c3dd94feaeb21f20054b9f30d5dabc5efabd",
-    "node": "github:DefinitelyTyped/DefinitelyTyped/node/node.d.ts#315f5612ceb4de6f1f81f8cf49878084ea3f364a",
-    "when": "registry:dt/when#2.4.0+20160317120654"
+  "globalDependencies": {
+    "node": "registry:dt/node#6.0.0+20160602155235"
   },
   "dependencies": {
-    "bluebird": "registry:npm/bluebird#3.3.4+20160406213700",
-    "node-uuid": "registry:npm/node-uuid#1.4.0+20160224202522"
+    "amqplib": "registry:npm/amqplib#0.4.1+20160401203933",
+    "bluebird": "registry:npm/bluebird#3.3.4+20160531224558",
+    "node-uuid": "registry:npm/node-uuid#1.4.7+20160503013124",
+    "when": "registry:npm/when#2.4.0+20160604153244"
   }
 }

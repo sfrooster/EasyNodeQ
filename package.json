@@ -1,15 +1,15 @@
 {
   "name": "easynodeq",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "NodeJS implementation of EasyNetQ",
   "license": "MIT",
   "main": "Bus.js",
   "typings": "Bus",
   "scripts": {
-    "prebuild": "npm install && typings install",
-    "build": "tsc --target ES5 --module commonjs --moduleResolution node --sourceMap Bus.ts test.ts",
-    "start": "node app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "preinstall": "npm install",
+    "postinstall": "typings install",
+    "build": "tsc",
+    "test": "node test.js"
   },
   "repository": {
     "type": "git",
