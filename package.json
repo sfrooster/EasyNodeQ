@@ -1,14 +1,12 @@
 {
   "name": "easynodeq",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "NodeJS implementation of EasyNetQ",
   "license": "MIT",
   "main": "Bus.js",
   "typings": "Bus",
   "scripts": {
-    "postinstall": "npm install && typings install",
-    "build": "tsc",
-    "test": "node test.js"
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
