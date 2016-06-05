@@ -6,8 +6,7 @@
   "main": "Bus.js",
   "typings": "Bus",
   "scripts": {
-    "preinstall": "npm install",
-    "postinstall": "typings install",
+    "postinstall": "npm install && typings install",
     "build": "tsc",
     "test": "node test.js"
   },
