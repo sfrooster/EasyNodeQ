@@ -54,7 +54,7 @@ In a Node-only environment, the TypeIDs can be any unique string you want (they 
 #### Use Your Bus and Messages (this is not exhaustive - I'm tired)
 
 Publish / Subscribe
-  ```
+```
   // create a subscriber
   // a Promise<IConsumerDispose> will be returned which can be used to cancel the subscription
   // IBus.Subscribe(<Message Type>, "<subscriber name>", <handler>)
@@ -67,7 +67,9 @@ Publish / Subscribe
   // elsewhere, publish - returns a Promise<boolean>
   bus.Publish(new SomethingHappendEvent(10, "Ten")
     .then(success => console.log(`was ${success ? "" : "not "} published`));
-    
+```
+Send / Receive
+```
   // listen on a queue for SomeCommand messages
   let consumerCancellers: IConsumerDispose[] = [];
   bus.Receive(SomeCommand, "queue_name", (message:SomeCommand) => {
@@ -78,7 +80,9 @@ Publish / Subscribe
   // elsewhere, send SomeCommand to a queue - returns a Promise<boolean>
   bus.Send(new SomeCommand(10, "Ten")
     .then(success => console.log(`was ${success ? "" : "not "} sent`));
-    
+```
+Optionally Clean-Up
+```
   // finally - cancel the subscribers if you're done with them
   // returns a Promise<boolean> - use if you like
   consumerCancellers.forEach(canceller => canceller.cancelConsumer());
@@ -86,4 +90,4 @@ Publish / Subscribe
   // you can also delete the queues, if you like
   // also returns a Promise<boolean>
   consumerCancellers.forEach(canceller => canceller.deleteQueue());
-  ```
+```
