@@ -161,6 +161,11 @@ export class Bus implements IBus {
                                     return channel.deleteQueue(queueID)
                                         .then(() => true)
                                         .catch(() => false);
+                                },
+                                purgeQueue: () => {
+                                    return channel.purgeQueue(queueID)
+                                        .then(() => true)
+                                        .catch(() => false);
                                 }
                             }
                         });
@@ -237,6 +242,11 @@ export class Bus implements IBus {
                                     return channel.deleteQueue(queue)
                                         .then(() => true)
                                         .catch(() => false);
+                                },
+                                purgeQueue: () => {
+                                    return channel.purgeQueue(queue)
+                                        .then(() => true)
+                                        .catch(() => false);
                                 }
                             }
                         })
@@ -294,6 +304,11 @@ export class Bus implements IBus {
                                 },
                                 deleteQueue: () => {
                                     return channel.deleteQueue(queue)
+                                        .then(() => true)
+                                        .catch(() => false);
+                                },
+                                purgeQueue: () => {
+                                    return channel.purgeQueue(queue)
                                         .then(() => true)
                                         .catch(() => false);
                                 }
@@ -415,6 +430,11 @@ export class Bus implements IBus {
                                     return responseChan.deleteQueue(rqType.TypeID)
                                         .then(() => true)
                                         .catch(() => false);
+                                },
+                                purgeQueue: () => {
+                                    return responseChan.purgeQueue(rqType.TypeID)
+                                        .then(() => true)
+                                        .catch(() => false);
                                 }
                             }
                         }))
@@ -478,6 +498,11 @@ export class Bus implements IBus {
                             },
                             deleteQueue: () => {
                                 return responseChan.deleteQueue(rqType.TypeID)
+                                    .then(() => true)
+                                    .catch(() => false);
+                            },
+                            purgeQueue: () => {
+                                return responseChan.purgeQueue(rqType.TypeID)
                                     .then(() => true)
                                     .catch(() => false);
                             }
@@ -578,6 +603,7 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => Promise<boolean>;
     deleteQueue: () => Promise<boolean>;
+    purgeQueue: () => Promise<boolean>;
 }
 
 export interface IPurgeQueueResponse {

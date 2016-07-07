@@ -130,6 +130,11 @@ var Bus = (function () {
                             return channel.deleteQueue(queueID)
                                 .then(function () { return true; })
                                 .catch(function () { return false; });
+                        },
+                        purgeQueue: function () {
+                            return channel.purgeQueue(queueID)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
                         }
                     };
                 });
@@ -196,6 +201,11 @@ var Bus = (function () {
                             return channel.deleteQueue(queue)
                                 .then(function () { return true; })
                                 .catch(function () { return false; });
+                        },
+                        purgeQueue: function () {
+                            return channel.purgeQueue(queue)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
                         }
                     };
                 });
@@ -246,6 +256,11 @@ var Bus = (function () {
                         },
                         deleteQueue: function () {
                             return channel.deleteQueue(queue)
+                                .then(function () { return true; })
+                                .catch(function () { return false; });
+                        },
+                        purgeQueue: function () {
+                            return channel.purgeQueue(queue)
                                 .then(function () { return true; })
                                 .catch(function () { return false; });
                         }
@@ -352,6 +367,11 @@ var Bus = (function () {
                         return responseChan.deleteQueue(rqType.TypeID)
                             .then(function () { return true; })
                             .catch(function () { return false; });
+                    },
+                    purgeQueue: function () {
+                        return responseChan.purgeQueue(rqType.TypeID)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
                     }
                 };
             }); });
@@ -407,6 +427,11 @@ var Bus = (function () {
                     },
                     deleteQueue: function () {
                         return responseChan.deleteQueue(rqType.TypeID)
+                            .then(function () { return true; })
+                            .catch(function () { return false; });
+                    },
+                    purgeQueue: function () {
+                        return responseChan.purgeQueue(rqType.TypeID)
                             .then(function () { return true; })
                             .catch(function () { return false; });
                     }
