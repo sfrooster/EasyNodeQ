@@ -502,3 +502,4 @@ var ExtendedBus = (function (_super) {
     return ExtendedBus;
 }(Bus));
 exports.ExtendedBus = ExtendedBus;
+//# sourceMappingURL=Bus.js.map
