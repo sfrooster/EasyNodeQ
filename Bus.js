@@ -1,3 +1,4 @@
+/// <reference path="./typings/index.d.ts" />
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -470,7 +471,9 @@ var ExtendedBus = (function (_super) {
     ExtendedBus.prototype.QueueStatus = function (queue) {
         return Promise.resolve(this.Channels.publishChannel.checkQueue(queue));
     };
+    ExtendedBus.prototype.PurgeQueue = function (queue) {
+        return Promise.resolve(this.Channels.publishChannel.purgeQueue(queue));
+    };
     return ExtendedBus;
 }(Bus));
 exports.ExtendedBus = ExtendedBus;
-//# sourceMappingURL=Bus.js.map

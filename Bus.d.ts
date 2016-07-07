@@ -99,6 +99,7 @@ export declare class ExtendedBus extends Bus implements IExtendedBus {
         messageCount: number;
         consumerCount: number;
     }>;
+    PurgeQueue(queue: string): Promise<IPurgeQueueResponse>;
 }
 export interface IBus {
     Publish(msg: {
@@ -186,6 +187,7 @@ export interface IExtendedBus extends IBus {
         messageCount: number;
         consumerCount: number;
     }>;
+    PurgeQueue(queue: string): Promise<IPurgeQueueResponse>;
 }
 export interface IQueueConsumeReply {
     consumerTag: string;
@@ -193,4 +195,7 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => Promise<boolean>;
     deleteQueue: () => Promise<boolean>;
+}
+export interface IPurgeQueueResponse {
+    messageCount: number;
 }
