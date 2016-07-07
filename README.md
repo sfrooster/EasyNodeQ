@@ -23,6 +23,9 @@ let config:IBusConfig = {
 }
 
 let bus = RabbitHutch.CreateBus(config);
+
+// or create an ExtendedBus, which has some methods for working with and checking queues
+let exBus = RabbitHutch.CreateExtendedBus(config);
 ```
 
 #### Defining a Message
