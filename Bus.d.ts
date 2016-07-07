@@ -1,3 +1,4 @@
+/// <reference path="typings/index.d.ts" />
 import * as bbPromise from 'bluebird';
 export declare class RabbitHutch {
     static CreateBus(config: IBusConfig): IBus;
@@ -8,16 +9,22 @@ export declare class Bus implements IExtendedBus {
     private static rpcQueueBase;
     private static defaultErrorQueue;
     private Connection;
+    private connectionCM;
     private rpcQueue;
-    private rpcConsumerTag;
     private rpcResponseHandlers;
     private Channels;
+    private channelsCM;
     private pubChanUp;
     private rpcConsumerUp;
     private static remove$type;
     SendToErrorQueue(msg: any, err?: string, stack?: string): bbPromise<boolean>;
     constructor(config: IBusConfig);
     Publish(msg: {
+        TypeID: string;
+    }, withTopic?: string): bbPromise<boolean>;
+    private doesPublishTypes;
+    private doesPublish(type);
+    PublishCM(msg: {
         TypeID: string;
     }, withTopic?: string): bbPromise<boolean>;
     Subscribe(type: {
@@ -95,6 +102,9 @@ export declare class Bus implements IExtendedBus {
 }
 export interface IBus {
     Publish(msg: {
+        TypeID: string;
+    }, withTopic?: string): bbPromise<boolean>;
+    PublishCM(msg: {
         TypeID: string;
     }, withTopic?: string): bbPromise<boolean>;
     Subscribe(type: {

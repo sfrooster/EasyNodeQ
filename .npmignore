@@ -1,6 +1,7 @@
 node_modules/
 .vscode/
 typings/
+.developer/
 
 .npmignore
 

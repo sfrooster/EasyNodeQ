@@ -1,7 +1,10 @@
-﻿import * as util from 'util';
+﻿/// <reference path="./typings/index.d.ts" />
+
 import * as amqp from 'amqplib';
 import * as bbPromise from 'bluebird';
 import * as uuid from 'node-uuid';
+
+let amqpcm = require('amqp-connection-manager');
 
 
 export class RabbitHutch {
@@ -17,12 +20,18 @@ export class Bus implements IExtendedBus {
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
     
-    private Connection: bbPromise<any>;
+    private Connection: bbPromise<amqp.Connection>;
+    private connectionCM: any;
     private rpcQueue = null;
-    private rpcConsumerTag: bbPromise<IQueueConsumeReply>;
     private rpcResponseHandlers = {};
 
-    private Channels: { publishChannel: any; rpcChannel: any; } = {
+    private Channels: { publishChannel: amqp.Channel; rpcChannel: amqp.Channel; } = {
+        publishChannel: null,
+        rpcChannel: null
+    }
+
+    private channelsCM: { publishChannelCW: any; publishChannel: amqp.Channel; rpcChannel: amqp.Channel; } = {
+        publishChannelCW: null,
         publishChannel: null,
         rpcChannel: null
     }
@@ -62,6 +71,27 @@ export class Bus implements IExtendedBus {
     constructor(public config: IBusConfig) {
         try {
             this.Connection = bbPromise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.connectionCM = amqpcm.connect(
+                [config.url + (config.vhost !== null ? '/' + config.vhost : '')], // TODO - change config to support an array
+                {
+                    heartbeatIntervalInSeconds: config.heartbeat,
+                    //json: true
+                });
+
+            this.connectionCM.on('connect', () => {
+                console.log('Connected to broker');
+                this.channelsCM.publishChannelCW = this.connectionCM.createChannel({
+                    //json: true,
+                    setup: (confChannel:amqp.Channel) => {
+                        this.channelsCM.publishChannel = confChannel;
+                        this.channelsCM.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false });
+                    }
+                });
+            });
+
+            this.connectionCM.on('disconnect', (params) => {
+                console.log('Disconnected from broker...', params.err.stack);
+            });
 
             this.pubChanUp = this.Connection
                 .then((connection) => connection.createConfirmChannel())
@@ -78,12 +108,42 @@ export class Bus implements IExtendedBus {
     // ========== Publish / Subscribe ==========
     public Publish(msg: { TypeID: string }, withTopic:string = ''): bbPromise<boolean> {
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject<boolean>(util.format('%s is not a valid TypeID', msg.TypeID));
+            return bbPromise.reject(`${msg.TypeID} is not a valid TypeID`);
         }
 
         return this.pubChanUp
             .then(() => this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }))
             .then((okExchangeReply) => this.Channels.publishChannel.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID }));
+    }
+
+    private doesPublishTypes = [];
+    private doesPublish(type: { TypeID: string }):bbPromise<boolean> {
+        console.log(this.doesPublishTypes);
+        if (this.doesPublishTypes.indexOf(type.TypeID) === -1) {
+            this.doesPublishTypes.push(type.TypeID);
+            console.log('waiting to add setup...');
+            return bbPromise.resolve(this.channelsCM.publishChannelCW
+                .addSetup((confChannel:amqp.Channel) => confChannel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false }))
+                .then(() => true));
+        }
+        else {
+            return bbPromise.resolve(true);
+        }
+    }
+    public PublishCM(msg: { TypeID: string }, withTopic:string = ''): bbPromise<boolean> {
+        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+            return bbPromise.reject(`${msg.TypeID} is not a valid TypeID`);
+        }
+
+        let r = this.doesPublish(msg)
+            .then((x) => {
+                console.log(x);
+                return this.channelsCM.publishChannelCW.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID });
+            });
+
+        console.log(`>>> ${JSON.stringify(r)}`);
+
+        return r;
     }
 
     public Subscribe(
@@ -94,7 +154,7 @@ export class Bus implements IExtendedBus {
         bbPromise<IConsumerDispose>
     {
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+            return bbPromise.reject(`${type.TypeID} is not a valid TypeID`);
         }
 
         if (typeof handler !== 'function') {
@@ -139,22 +199,19 @@ export class Bus implements IExtendedBus {
                                     if (!ackdOrNackd) channel.ack(msg);
                                 }
                                 else {
-                                    this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
+                                    this.SendToErrorQueue(_msg, `mismatched TypeID: ${msg.properties.type} !== ${type.TypeID}`);
                                 }
                             }
                         }))
                         .then((ctag) => {
                             return {
-                                cancelConsumer: () => {
-                                    return channel.cancel(ctag.consumerTag)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                },
-                                deleteQueue: () => {
-                                    return channel.deleteQueue(queueID)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                }
+                                cancelConsumer: () => bbPromise.resolve(channel.cancel(ctag.consumerTag)
+                                    .then(() => true)
+                                    .catch(() => false))
+                                ,
+                                deleteQueue: () => bbPromise.resolve(channel.deleteQueue(queueID)
+                                    .then(() => true)
+                                    .catch(() => false))
                             }
                         });
                 })
@@ -164,7 +221,7 @@ export class Bus implements IExtendedBus {
     // ========== Send / Receive ==========
     public Send(queue: string, msg: { TypeID: string }): bbPromise<boolean> {
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject<boolean>(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+            return bbPromise.reject(`${msg.TypeID} is not a valid TypeID`);
         }
 
         return this.pubChanUp
@@ -215,7 +272,7 @@ export class Bus implements IExtendedBus {
                                 if (!ackdOrNackd) channel.ack(msg);
                             }
                             else {
-                                this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID))
+                                this.SendToErrorQueue(_msg, `mismatched TypeID: ${msg.properties.type} !== ${rxType.TypeID}`);
                             }
                         }
                     })
@@ -341,7 +398,6 @@ export class Bus implements IExtendedBus {
                 });
             })
             .then((okSubscribeReply) => {
-                this.rpcConsumerTag = okSubscribeReply.consumerTag;
                 return true;
             });
 
@@ -394,21 +450,18 @@ export class Bus implements IExtendedBus {
                             if (!ackdOrNackd) responseChan.ack(reqMsg);
                         }
                         else {
-                            this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID))
+                            this.SendToErrorQueue(msg, `mismatched TypeID: ${reqMsg.properties.type} !== ${rqType.TypeID}`);
                         }
                     })
                         .then((ctag) => {
                             return {
-                                cancelConsumer: () => {
-                                    return responseChan.cancel(ctag.consumerTag)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                },
-                                deleteQueue: () => {
-                                    return responseChan.deleteQueue(rqType.TypeID)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                }
+                                cancelConsumer: () => bbPromise.resolve(responseChan.cancel(ctag.consumerTag)
+                                    .then(() => true)
+                                    .catch(() => false))
+                                ,
+                                deleteQueue: () => bbPromise.resolve(responseChan.deleteQueue(rqType.TypeID)
+                                    .then(() => true)
+                                    .catch(() => false))
                             }
                         }))
             });
@@ -459,21 +512,18 @@ export class Bus implements IExtendedBus {
                             });
                         }
                         else {
-                            this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID))
+                            this.SendToErrorQueue(msg, `mismatched TypeID: ${reqMsg.properties.type} !== ${rqType.TypeID}`)
                         }
                     })
                     .then((ctag) => {
                         return {
-                            cancelConsumer: () => {
-                                return responseChan.cancel(ctag.consumerTag)
-                                    .then(() => true)
-                                    .catch(() => false);
-                            },
-                            deleteQueue: () => {
-                                return responseChan.deleteQueue(rqType.TypeID)
-                                    .then(() => true)
-                                    .catch(() => false);
-                            }
+                            cancelConsumer: () => bbPromise.resolve(responseChan.cancel(ctag.consumerTag)
+                                .then(() => true)
+                                .catch(() => false))
+                            ,
+                            deleteQueue: () => bbPromise.resolve(responseChan.deleteQueue(rqType.TypeID)
+                                .then(() => true)
+                                .catch(() => false))
                         }
                     }))
                 });
@@ -518,6 +568,7 @@ export class Bus implements IExtendedBus {
 
 export interface IBus {
     Publish(msg: { TypeID: string }, withTopic?: string): bbPromise<boolean>;
+    PublishCM(msg: { TypeID: string }, withTopic?: string): bbPromise<boolean>;
     Subscribe(type: { TypeID: string }, subscriberName: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void, withTopic?:string): bbPromise<IConsumerDispose>;
 
     Send(queue: string, msg: { TypeID: string }): bbPromise<boolean>;

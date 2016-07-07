@@ -1,8 +1,9 @@
+/// <reference path="./typings/index.d.ts" />
 "use strict";
-var util = require('util');
 var amqp = require('amqplib');
 var bbPromise = require('bluebird');
 var uuid = require('node-uuid');
+var amqpcm = require('amqp-connection-manager');
 var RabbitHutch = (function () {
     function RabbitHutch() {
     }
@@ -23,8 +24,31 @@ var Bus = (function () {
             publishChannel: null,
             rpcChannel: null
         };
+        this.channelsCM = {
+            publishChannelCW: null,
+            publishChannel: null,
+            rpcChannel: null
+        };
+        this.doesPublishTypes = [];
         try {
             this.Connection = bbPromise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.connectionCM = amqpcm.connect([config.url + (config.vhost !== null ? '/' + config.vhost : '')], // TODO - change config to support an array
+            {
+                heartbeatIntervalInSeconds: config.heartbeat,
+            });
+            this.connectionCM.on('connect', function () {
+                console.log('Connected to broker');
+                _this.channelsCM.publishChannelCW = _this.connectionCM.createChannel({
+                    //json: true,
+                    setup: function (confChannel) {
+                        _this.channelsCM.publishChannel = confChannel;
+                        _this.channelsCM.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false });
+                    }
+                });
+            });
+            this.connectionCM.on('disconnect', function (params) {
+                console.log('Disconnected from broker...', params.err.stack);
+            });
             this.pubChanUp = this.Connection
                 .then(function (connection) { return connection.createConfirmChannel(); })
                 .then(function (confChanReply) {
@@ -56,17 +80,44 @@ var Bus = (function () {
         var _this = this;
         if (withTopic === void 0) { withTopic = ''; }
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', msg.TypeID));
+            return bbPromise.reject(msg.TypeID + " is not a valid TypeID");
         }
         return this.pubChanUp
             .then(function () { return _this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }); })
             .then(function (okExchangeReply) { return _this.Channels.publishChannel.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID }); });
     };
+    Bus.prototype.doesPublish = function (type) {
+        console.log(this.doesPublishTypes);
+        if (this.doesPublishTypes.indexOf(type.TypeID) === -1) {
+            this.doesPublishTypes.push(type.TypeID);
+            console.log('waiting to add setup...');
+            return bbPromise.resolve(this.channelsCM.publishChannelCW
+                .addSetup(function (confChannel) { return confChannel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false }); })
+                .then(function () { return true; }));
+        }
+        else {
+            return bbPromise.resolve(true);
+        }
+    };
+    Bus.prototype.PublishCM = function (msg, withTopic) {
+        var _this = this;
+        if (withTopic === void 0) { withTopic = ''; }
+        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+            return bbPromise.reject(msg.TypeID + " is not a valid TypeID");
+        }
+        var r = this.doesPublish(msg)
+            .then(function (x) {
+            console.log(x);
+            return _this.channelsCM.publishChannelCW.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID });
+        });
+        console.log(">>> " + JSON.stringify(r));
+        return r;
+    };
     Bus.prototype.Subscribe = function (type, subscriberName, handler, withTopic) {
         var _this = this;
         if (withTopic === void 0) { withTopic = '#'; }
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+            return bbPromise.reject(type.TypeID + " is not a valid TypeID");
         }
         if (typeof handler !== 'function') {
             return bbPromise.reject('xyz is not a valid function');
@@ -105,22 +156,18 @@ var Bus = (function () {
                                 channel.ack(msg);
                         }
                         else {
-                            _this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
+                            _this.SendToErrorQueue(_msg, "mismatched TypeID: " + msg.properties.type + " !== " + type.TypeID);
                         }
                     }
                 }); })
                     .then(function (ctag) {
                     return {
-                        cancelConsumer: function () {
-                            return channel.cancel(ctag.consumerTag)
-                                .then(function () { return true; })
-                                .catch(function () { return false; });
-                        },
-                        deleteQueue: function () {
-                            return channel.deleteQueue(queueID)
-                                .then(function () { return true; })
-                                .catch(function () { return false; });
-                        }
+                        cancelConsumer: function () { return bbPromise.resolve(channel.cancel(ctag.consumerTag)
+                            .then(function () { return true; })
+                            .catch(function () { return false; })); },
+                        deleteQueue: function () { return bbPromise.resolve(channel.deleteQueue(queueID)
+                            .then(function () { return true; })
+                            .catch(function () { return false; })); }
                     };
                 });
             });
@@ -130,7 +177,7 @@ var Bus = (function () {
     Bus.prototype.Send = function (queue, msg) {
         var _this = this;
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+            return bbPromise.reject(msg.TypeID + " is not a valid TypeID");
         }
         return this.pubChanUp
             .then(function () { return _this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }); });
@@ -171,7 +218,7 @@ var Bus = (function () {
                                 channel.ack(msg);
                         }
                         else {
-                            _this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID));
+                            _this.SendToErrorQueue(_msg, "mismatched TypeID: " + msg.properties.type + " !== " + rxType.TypeID);
                         }
                     }
                 })
@@ -284,7 +331,6 @@ var Bus = (function () {
             });
         })
             .then(function (okSubscribeReply) {
-            _this.rpcConsumerTag = okSubscribeReply.consumerTag;
             return true;
         });
         return this.rpcConsumerUp
@@ -328,21 +374,17 @@ var Bus = (function () {
                         responseChan.ack(reqMsg);
                 }
                 else {
-                    _this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID));
+                    _this.SendToErrorQueue(msg, "mismatched TypeID: " + reqMsg.properties.type + " !== " + rqType.TypeID);
                 }
             })
                 .then(function (ctag) {
                 return {
-                    cancelConsumer: function () {
-                        return responseChan.cancel(ctag.consumerTag)
-                            .then(function () { return true; })
-                            .catch(function () { return false; });
-                    },
-                    deleteQueue: function () {
-                        return responseChan.deleteQueue(rqType.TypeID)
-                            .then(function () { return true; })
-                            .catch(function () { return false; });
-                    }
+                    cancelConsumer: function () { return bbPromise.resolve(responseChan.cancel(ctag.consumerTag)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })); },
+                    deleteQueue: function () { return bbPromise.resolve(responseChan.deleteQueue(rqType.TypeID)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })); }
                 };
             }); });
         });
@@ -385,21 +427,17 @@ var Bus = (function () {
                     });
                 }
                 else {
-                    _this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID));
+                    _this.SendToErrorQueue(msg, "mismatched TypeID: " + reqMsg.properties.type + " !== " + rqType.TypeID);
                 }
             })
                 .then(function (ctag) {
                 return {
-                    cancelConsumer: function () {
-                        return responseChan.cancel(ctag.consumerTag)
-                            .then(function () { return true; })
-                            .catch(function () { return false; });
-                    },
-                    deleteQueue: function () {
-                        return responseChan.deleteQueue(rqType.TypeID)
-                            .then(function () { return true; })
-                            .catch(function () { return false; });
-                    }
+                    cancelConsumer: function () { return bbPromise.resolve(responseChan.cancel(ctag.consumerTag)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })); },
+                    deleteQueue: function () { return bbPromise.resolve(responseChan.deleteQueue(rqType.TypeID)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })); }
                 };
             }); });
         });

@@ -1,6 +1,6 @@
 {
   "globalDependencies": {
-    "node": "registry:dt/node#6.0.0+20160602155235"
+    "node": "registry:dt/node#6.0.0+20160608110640"
   },
   "dependencies": {
     "amqplib": "registry:npm/amqplib#0.4.1+20160401203933",
