@@ -5,7 +5,7 @@ import * as uuid from 'node-uuid';
 
 
 export class RabbitHutch {
-    public static CreateBus(config: IBusConfig): IBus {
+    public static CreateBus(config: IBusConfig): IExtendedBus {
         var bus = new Bus(config);
         return bus;
     }
@@ -544,7 +544,7 @@ export interface IExtendedBus extends IBus {
     DeleteExchange(exchange: string, ifUnused: boolean): void;
     DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): bbPromise<{ messageCount: number }>;
     DeleteQueueUnconditional(queue: string): bbPromise<{ messageCount: number }>;
-    QueueStatus(queue: string): bbPromise<{ queue: string; messageCount: number; consumerCount: number; }>;
+    QueueStatus(queue: string): bbPromise<IQueueStats>;
 }
 
 interface IPublishedObj {
@@ -560,4 +560,10 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => bbPromise<boolean>;
     deleteQueue: () => bbPromise<boolean>;
+}
+
+export interface IQueueStats {
+    queue: string;
+    messageCount: number;
+    consumerCount: number;
 }

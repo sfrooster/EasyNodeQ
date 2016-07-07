@@ -1,6 +1,6 @@
 import * as bbPromise from 'bluebird';
 export declare class RabbitHutch {
-    static CreateBus(config: IBusConfig): IBus;
+    static CreateBus(config: IBusConfig): IExtendedBus;
 }
 export declare class Bus implements IExtendedBus {
     config: IBusConfig;
@@ -174,11 +174,7 @@ export interface IExtendedBus extends IBus {
     DeleteQueueUnconditional(queue: string): bbPromise<{
         messageCount: number;
     }>;
-    QueueStatus(queue: string): bbPromise<{
-        queue: string;
-        messageCount: number;
-        consumerCount: number;
-    }>;
+    QueueStatus(queue: string): bbPromise<IQueueStats>;
 }
 export interface IQueueConsumeReply {
     consumerTag: string;
@@ -186,4 +182,9 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => bbPromise<boolean>;
     deleteQueue: () => bbPromise<boolean>;
+}
+export interface IQueueStats {
+    queue: string;
+    messageCount: number;
+    consumerCount: number;
 }
