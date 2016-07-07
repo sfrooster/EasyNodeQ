@@ -195,6 +195,7 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => Promise<boolean>;
     deleteQueue: () => Promise<boolean>;
+    purgeQueue: () => Promise<boolean>;
 }
 export interface IPurgeQueueResponse {
     messageCount: number;
