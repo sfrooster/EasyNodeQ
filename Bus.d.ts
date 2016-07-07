@@ -1,8 +1,9 @@
-import * as bbPromise from 'bluebird';
+import * as Promise from 'bluebird';
 export declare class RabbitHutch {
     static CreateBus(config: IBusConfig): IBus;
+    static CreateExtendedBus(config: IBusConfig): IExtendedBus;
 }
-export declare class Bus implements IExtendedBus {
+export declare class Bus implements IBus {
     config: IBusConfig;
     private static rpcExchange;
     private static rpcQueueBase;
@@ -11,15 +12,18 @@ export declare class Bus implements IExtendedBus {
     private rpcQueue;
     private rpcConsumerTag;
     private rpcResponseHandlers;
-    private Channels;
+    protected Channels: {
+        publishChannel: any;
+        rpcChannel: any;
+    };
     private pubChanUp;
     private rpcConsumerUp;
     private static remove$type;
-    SendToErrorQueue(msg: any, err?: string, stack?: string): bbPromise<boolean>;
+    SendToErrorQueue(msg: any, err?: string, stack?: string): Promise<boolean>;
     constructor(config: IBusConfig);
     Publish(msg: {
         TypeID: string;
-    }, withTopic?: string): bbPromise<boolean>;
+    }, withTopic?: string): Promise<boolean>;
     Subscribe(type: {
         TypeID: string;
     }, subscriberName: string, handler: (msg: {
@@ -27,10 +31,10 @@ export declare class Bus implements IExtendedBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => void, withTopic?: string): bbPromise<IConsumerDispose>;
+    }) => void, withTopic?: string): Promise<IConsumerDispose>;
     Send(queue: string, msg: {
         TypeID: string;
-    }): bbPromise<boolean>;
+    }): Promise<boolean>;
     Receive(rxType: {
         TypeID: string;
     }, queue: string, handler: (msg: {
@@ -38,7 +42,7 @@ export declare class Bus implements IExtendedBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => void): bbPromise<IConsumerDispose>;
+    }) => void): Promise<IConsumerDispose>;
     ReceiveTypes(queue: string, handlers: {
         rxType: {
             TypeID: string;
@@ -49,10 +53,10 @@ export declare class Bus implements IExtendedBus {
             ack: () => void;
             nack: () => void;
         }) => void;
-    }[]): bbPromise<IConsumerDispose>;
+    }[]): Promise<IConsumerDispose>;
     Request(request: {
         TypeID: string;
-    }): bbPromise<any>;
+    }): Promise<any>;
     Respond(rqType: {
         TypeID: string;
     }, rsType: {
@@ -64,7 +68,7 @@ export declare class Bus implements IExtendedBus {
         nack: () => void;
     }) => {
         TypeID: string;
-    }): bbPromise<IConsumerDispose>;
+    }): Promise<IConsumerDispose>;
     RespondAsync(rqType: {
         TypeID: string;
     }, rsType: {
@@ -74,20 +78,23 @@ export declare class Bus implements IExtendedBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => bbPromise<{
+    }) => Promise<{
         TypeID: string;
-    }>): bbPromise<IConsumerDispose>;
+    }>): Promise<IConsumerDispose>;
     private static ToBuffer(obj);
     private static FromSubscription(obj);
-    CancelConsumer(consumerTag: string): bbPromise<IQueueConsumeReply>;
+}
+export declare class ExtendedBus extends Bus implements IExtendedBus {
+    constructor(config: IBusConfig);
+    CancelConsumer(consumerTag: string): Promise<IQueueConsumeReply>;
     DeleteExchange(exchange: string, ifUnused?: boolean): void;
-    DeleteQueue(queue: string, ifUnused?: boolean, ifEmpty?: boolean): bbPromise<{
+    DeleteQueue(queue: string, ifUnused?: boolean, ifEmpty?: boolean): Promise<{
         messageCount: number;
     }>;
-    DeleteQueueUnconditional(queue: string): bbPromise<{
+    DeleteQueueUnconditional(queue: string): Promise<{
         messageCount: number;
     }>;
-    QueueStatus(queue: string): bbPromise<{
+    QueueStatus(queue: string): Promise<{
         queue: string;
         messageCount: number;
         consumerCount: number;
@@ -96,7 +103,7 @@ export declare class Bus implements IExtendedBus {
 export interface IBus {
     Publish(msg: {
         TypeID: string;
-    }, withTopic?: string): bbPromise<boolean>;
+    }, withTopic?: string): Promise<boolean>;
     Subscribe(type: {
         TypeID: string;
     }, subscriberName: string, handler: (msg: {
@@ -104,10 +111,10 @@ export interface IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => void, withTopic?: string): bbPromise<IConsumerDispose>;
+    }) => void, withTopic?: string): Promise<IConsumerDispose>;
     Send(queue: string, msg: {
         TypeID: string;
-    }): bbPromise<boolean>;
+    }): Promise<boolean>;
     Receive(rxType: {
         TypeID: string;
     }, queue: string, handler: (msg: {
@@ -115,7 +122,7 @@ export interface IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => void): bbPromise<IConsumerDispose>;
+    }) => void): Promise<IConsumerDispose>;
     ReceiveTypes(queue: string, handlers: {
         rxType: {
             TypeID: string;
@@ -126,10 +133,10 @@ export interface IBus {
             ack: () => void;
             nack: () => void;
         }) => void;
-    }[]): bbPromise<IConsumerDispose>;
+    }[]): Promise<IConsumerDispose>;
     Request(request: {
         TypeID: string;
-    }): bbPromise<{
+    }): Promise<{
         TypeID: string;
     }>;
     Respond(rqType: {
@@ -143,7 +150,7 @@ export interface IBus {
         nack: () => void;
     }) => {
         TypeID: string;
-    }): bbPromise<IConsumerDispose>;
+    }): Promise<IConsumerDispose>;
     RespondAsync(rqType: {
         TypeID: string;
     }, rsType: {
@@ -153,9 +160,9 @@ export interface IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
-    }) => bbPromise<{
+    }) => Promise<{
         TypeID: string;
-    }>): bbPromise<IConsumerDispose>;
+    }>): Promise<IConsumerDispose>;
     SendToErrorQueue(msg: any, err?: string, stack?: string): void;
 }
 export interface IBusConfig {
@@ -166,15 +173,15 @@ export interface IBusConfig {
     vhost: string;
 }
 export interface IExtendedBus extends IBus {
-    CancelConsumer(consumerTag: string): bbPromise<IQueueConsumeReply>;
+    CancelConsumer(consumerTag: string): Promise<IQueueConsumeReply>;
     DeleteExchange(exchange: string, ifUnused: boolean): void;
-    DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): bbPromise<{
+    DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): Promise<{
         messageCount: number;
     }>;
-    DeleteQueueUnconditional(queue: string): bbPromise<{
+    DeleteQueueUnconditional(queue: string): Promise<{
         messageCount: number;
     }>;
-    QueueStatus(queue: string): bbPromise<{
+    QueueStatus(queue: string): Promise<{
         queue: string;
         messageCount: number;
         consumerCount: number;
@@ -184,6 +191,6 @@ export interface IQueueConsumeReply {
     consumerTag: string;
 }
 export interface IConsumerDispose {
-    cancelConsumer: () => bbPromise<boolean>;
-    deleteQueue: () => bbPromise<boolean>;
+    cancelConsumer: () => Promise<boolean>;
+    deleteQueue: () => Promise<boolean>;
 }

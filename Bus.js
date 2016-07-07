@@ -1,13 +1,22 @@
 "use strict";
+var __extends = (this && this.__extends) || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    function __() { this.constructor = d; }
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+};
 var util = require('util');
 var amqp = require('amqplib');
-var bbPromise = require('bluebird');
+var Promise = require('bluebird');
 var uuid = require('node-uuid');
 var RabbitHutch = (function () {
     function RabbitHutch() {
     }
     RabbitHutch.CreateBus = function (config) {
         var bus = new Bus(config);
+        return bus;
+    };
+    RabbitHutch.CreateExtendedBus = function (config) {
+        var bus = new ExtendedBus(config);
         return bus;
     };
     return RabbitHutch;
@@ -24,7 +33,7 @@ var Bus = (function () {
             rpcChannel: null
         };
         try {
-            this.Connection = bbPromise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.Connection = Promise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
             this.pubChanUp = this.Connection
                 .then(function (connection) { return connection.createConfirmChannel(); })
                 .then(function (confChanReply) {
@@ -56,7 +65,7 @@ var Bus = (function () {
         var _this = this;
         if (withTopic === void 0) { withTopic = ''; }
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', msg.TypeID));
+            return Promise.reject(util.format('%s is not a valid TypeID', msg.TypeID));
         }
         return this.pubChanUp
             .then(function () { return _this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }); })
@@ -66,14 +75,14 @@ var Bus = (function () {
         var _this = this;
         if (withTopic === void 0) { withTopic = '#'; }
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+            return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
         }
         if (typeof handler !== 'function') {
-            return bbPromise.reject('xyz is not a valid function');
+            return Promise.reject('xyz is not a valid function');
         }
         var queueID = type.TypeID + '_' + subscriberName;
         return this.Connection.then(function (connection) {
-            return bbPromise.resolve(connection.createChannel())
+            return Promise.resolve(connection.createChannel())
                 .then(function (channel) {
                 channel.prefetch(_this.config.prefetch);
                 return channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false })
@@ -130,7 +139,7 @@ var Bus = (function () {
     Bus.prototype.Send = function (queue, msg) {
         var _this = this;
         if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return bbPromise.reject(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+            return Promise.reject(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
         }
         return this.pubChanUp
             .then(function () { return _this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }); });
@@ -139,7 +148,7 @@ var Bus = (function () {
         var _this = this;
         var channel = null;
         return this.Connection.then(function (connection) {
-            return bbPromise.resolve(connection.createChannel())
+            return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
@@ -196,7 +205,7 @@ var Bus = (function () {
         var _this = this;
         var channel = null;
         return this.Connection.then(function (connection) {
-            return bbPromise.resolve(connection.createChannel())
+            return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
@@ -249,7 +258,7 @@ var Bus = (function () {
         var _this = this;
         var resolver;
         var rejecter;
-        var responsebbPromise = new bbPromise(function (resolve, reject) {
+        var responsePromise = new Promise(function (resolve, reject) {
             resolver = resolve;
             rejecter = reject;
         });
@@ -290,7 +299,7 @@ var Bus = (function () {
         return this.rpcConsumerUp
             .then(function () { return _this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }); })
             .then(function (okExchangeReply) { return _this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: _this.rpcQueue, correlationId: correlationID }); })
-            .then(function (ackd) { return responsebbPromise; });
+            .then(function (ackd) { return responsePromise; });
     };
     Bus.prototype.Respond = function (rqType, rsType, responder) {
         var _this = this;
@@ -416,25 +425,6 @@ var Bus = (function () {
         Bus.remove$type(msg);
         return msg;
     };
-    // ========== Extended ==========
-    Bus.prototype.CancelConsumer = function (consumerTag) {
-        return bbPromise.resolve(this.Channels.publishChannel.cancel(consumerTag));
-    };
-    Bus.prototype.DeleteExchange = function (exchange, ifUnused) {
-        if (ifUnused === void 0) { ifUnused = false; }
-        this.Channels.publishChannel.deleteExchange(exchange, { ifUnused: ifUnused });
-    };
-    Bus.prototype.DeleteQueue = function (queue, ifUnused, ifEmpty) {
-        if (ifUnused === void 0) { ifUnused = false; }
-        if (ifEmpty === void 0) { ifEmpty = false; }
-        return bbPromise.resolve(this.Channels.publishChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
-    };
-    Bus.prototype.DeleteQueueUnconditional = function (queue) {
-        return bbPromise.resolve(this.Channels.publishChannel.deleteQueue(queue));
-    };
-    Bus.prototype.QueueStatus = function (queue) {
-        return bbPromise.resolve(this.Channels.publishChannel.checkQueue(queue));
-    };
     Bus.rpcExchange = 'easy_net_q_rpc';
     Bus.rpcQueueBase = 'easynetq.response.';
     Bus.defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
@@ -457,4 +447,30 @@ var Bus = (function () {
     return Bus;
 }());
 exports.Bus = Bus;
+var ExtendedBus = (function (_super) {
+    __extends(ExtendedBus, _super);
+    function ExtendedBus(config) {
+        _super.call(this, config);
+    }
+    ExtendedBus.prototype.CancelConsumer = function (consumerTag) {
+        return Promise.resolve(this.Channels.publishChannel.cancel(consumerTag));
+    };
+    ExtendedBus.prototype.DeleteExchange = function (exchange, ifUnused) {
+        if (ifUnused === void 0) { ifUnused = false; }
+        this.Channels.publishChannel.deleteExchange(exchange, { ifUnused: ifUnused });
+    };
+    ExtendedBus.prototype.DeleteQueue = function (queue, ifUnused, ifEmpty) {
+        if (ifUnused === void 0) { ifUnused = false; }
+        if (ifEmpty === void 0) { ifEmpty = false; }
+        return Promise.resolve(this.Channels.publishChannel.deleteQueue(queue, { ifUnused: ifUnused, ifEmpty: ifEmpty }));
+    };
+    ExtendedBus.prototype.DeleteQueueUnconditional = function (queue) {
+        return Promise.resolve(this.Channels.publishChannel.deleteQueue(queue));
+    };
+    ExtendedBus.prototype.QueueStatus = function (queue) {
+        return Promise.resolve(this.Channels.publishChannel.checkQueue(queue));
+    };
+    return ExtendedBus;
+}(Bus));
+exports.ExtendedBus = ExtendedBus;
 //# sourceMappingURL=Bus.js.map

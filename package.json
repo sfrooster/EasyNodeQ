@@ -1,6 +1,6 @@
 {
   "name": "easynodeq",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "NodeJS implementation of EasyNetQ",
   "license": "MIT",
   "main": "Bus.js",
@@ -15,6 +15,10 @@
   "author": {
     "name": "Michael Haan",
     "email": "haanmd@gmail.com"
+  },
+  "devDependencies": {
+    "tslint": "^3.13.0",
+    "typescript": "^1.8.10"
   },
   "dependencies": {
     "amqplib": "^0.4.0",
