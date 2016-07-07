@@ -1,4 +1,6 @@
-﻿import * as util from 'util';
+﻿/// <reference path="./typings/index.d.ts" />
+
+import * as util from 'util';
 import * as amqp from 'amqplib';
 import * as Promise from 'bluebird';
 import * as uuid from 'node-uuid';
@@ -525,6 +527,10 @@ export class ExtendedBus extends Bus implements IExtendedBus {
     public QueueStatus(queue: string): Promise<{ queue: string; messageCount: number; consumerCount: number; }> {
         return Promise.resolve<{ queue: string; messageCount: number; consumerCount: number; }>(this.Channels.publishChannel.checkQueue(queue));
     }
+
+    public PurgeQueue(queue: string): Promise<IPurgeQueueResponse> {
+        return Promise.resolve<IPurgeQueueResponse>(this.Channels.publishChannel.purgeQueue(queue));
+    }
 }
 
 export interface IBus {
@@ -556,6 +562,7 @@ export interface IExtendedBus extends IBus {
     DeleteQueue(queue: string, ifUnused: boolean, ifEmpty: boolean): Promise<{ messageCount: number }>;
     DeleteQueueUnconditional(queue: string): Promise<{ messageCount: number }>;
     QueueStatus(queue: string): Promise<{ queue: string; messageCount: number; consumerCount: number; }>;
+    PurgeQueue(queue: string): Promise<IPurgeQueueResponse>;
 }
 
 interface IPublishedObj {
@@ -571,4 +578,8 @@ export interface IQueueConsumeReply {
 export interface IConsumerDispose {
     cancelConsumer: () => Promise<boolean>;
     deleteQueue: () => Promise<boolean>;
+}
+
+export interface IPurgeQueueResponse {
+    messageCount: number;
 }
