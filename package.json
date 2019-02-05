@@ -17,10 +17,13 @@
     "email": "haanmd@gmail.com"
   },
   "dependencies": {
-    "amqplib": "^0.4.0",
+    "amqplib": "^0.5.3",
     "bluebird": "^3.3.4",
     "node-uuid": "^1.4.3",
-    "tslint": "^3.13.0",
-    "typescript": "^2.0.0"
+    "tslint": "^5.12.1",
+    "typescript": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^10.12.21"
   }
 }

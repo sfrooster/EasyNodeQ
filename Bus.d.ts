@@ -19,7 +19,7 @@ export declare class Bus implements IBus {
     private pubChanUp;
     private rpcConsumerUp;
     private static remove$type;
-    SendToErrorQueue(msg: any, err?: string, stack?: string): Promise<boolean>;
+    SendToErrorQueue(msg: any, err?: string, stack?: string): any;
     constructor(config: IBusConfig);
     Publish(msg: {
         TypeID: string;
@@ -81,8 +81,8 @@ export declare class Bus implements IBus {
     }) => Promise<{
         TypeID: string;
     }>): Promise<IConsumerDispose>;
-    private static ToBuffer(obj);
-    private static FromSubscription(obj);
+    private static ToBuffer;
+    private static FromSubscription;
 }
 export declare class ExtendedBus extends Bus implements IExtendedBus {
     constructor(config: IBusConfig);

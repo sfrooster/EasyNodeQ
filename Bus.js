@@ -1,15 +1,23 @@
-/// <reference path="./typings/index.d.ts" />
 "use strict";
-var __extends = (this && this.__extends) || function (d, b) {
-    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
-    function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-};
-var util = require('util');
-var amqp = require('amqplib');
-var Promise = require('bluebird');
-var uuid = require('node-uuid');
-var RabbitHutch = (function () {
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var util = require("util");
+var amqp = require("amqplib");
+var Promise = require("bluebird");
+var uuid = require("node-uuid");
+var RabbitHutch = /** @class */ (function () {
     function RabbitHutch() {
     }
     RabbitHutch.CreateBus = function (config) {
@@ -23,7 +31,7 @@ var RabbitHutch = (function () {
     return RabbitHutch;
 }());
 exports.RabbitHutch = RabbitHutch;
-var Bus = (function () {
+var Bus = /** @class */ (function () {
     function Bus(config) {
         var _this = this;
         this.config = config;
@@ -305,6 +313,7 @@ var Bus = (function () {
                     delete _this.rpcResponseHandlers[msg.properties.correlationId];
                 }
                 else {
+                    //ignore it?
                 }
             });
         })
@@ -442,7 +451,7 @@ var Bus = (function () {
     // ========== Etc  ==========
     Bus.ToBuffer = function (obj) {
         Bus.remove$type(obj, false);
-        return new Buffer(JSON.stringify(obj));
+        return Buffer.from(JSON.stringify(obj));
     };
     Bus.FromSubscription = function (obj) {
         //fields: "{"consumerTag":"amq.ctag-QreMJ-zvC07EW2EKtWZhmQ","deliveryTag":1,"redelivered":false,"exchange":"","routingKey":"easynetq.response.0303b47c-2229-4557-9218-30c99c67f8c9"}"
@@ -473,10 +482,10 @@ var Bus = (function () {
     return Bus;
 }());
 exports.Bus = Bus;
-var ExtendedBus = (function (_super) {
+var ExtendedBus = /** @class */ (function (_super) {
     __extends(ExtendedBus, _super);
     function ExtendedBus(config) {
-        _super.call(this, config);
+        return _super.call(this, config) || this;
     }
     ExtendedBus.prototype.CancelConsumer = function (consumerTag) {
         return Promise.resolve(this.Channels.publishChannel.cancel(consumerTag));

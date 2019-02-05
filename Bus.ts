@@ -1,6 +1,4 @@
-﻿/// <reference path="./typings/index.d.ts" />
-
-import * as util from 'util';
+﻿import * as util from 'util';
 import * as amqp from 'amqplib';
 import * as Promise from 'bluebird';
 import * as uuid from 'node-uuid';
@@ -23,7 +21,7 @@ export class Bus implements IBus {
     private static rpcExchange = 'easy_net_q_rpc';
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
-    
+
     private Connection: Promise<any>;
     private rpcQueue = null;
     private rpcConsumerTag: Promise<IQueueConsumeReply>;
@@ -513,9 +511,9 @@ export class Bus implements IBus {
 
 
     // ========== Etc  ==========
-    private static ToBuffer(obj: any): NodeBuffer {
+    private static ToBuffer(obj: any): Buffer {
         Bus.remove$type(obj, false);
-        return new Buffer(JSON.stringify(obj));
+        return Buffer.from(JSON.stringify(obj));
     }
 
     private static FromSubscription(obj: IPublishedObj): any {
@@ -591,7 +589,7 @@ export interface IExtendedBus extends IBus {
 }
 
 interface IPublishedObj {
-    content: NodeBuffer;
+    content: Buffer;
     fields: any;
     properties: any;
 }
