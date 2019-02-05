@@ -103,6 +103,7 @@ var Bus = /** @class */ (function () {
                         if (msg.properties.type === type.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                             var ackdOrNackd = false;
+                            var deferred = false;
                             handler(_msg, {
                                 ack: function () {
                                     channel.ack(msg);
@@ -117,9 +118,12 @@ var Bus = /** @class */ (function () {
                                         _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                     }
                                     ackdOrNackd = true;
-                                }
+                                },
+                                defer: function () {
+                                    deferred = true;
+                                },
                             });
-                            if (!ackdOrNackd)
+                            if (!ackdOrNackd && !deferred)
                                 channel.ack(msg);
                         }
                         else {
@@ -174,6 +178,7 @@ var Bus = /** @class */ (function () {
                         if (msg.properties.type === rxType.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                             var ackdOrNackd = false;
+                            var deferred = false;
                             handler(_msg, {
                                 ack: function () {
                                     channel.ack(msg);
@@ -188,9 +193,12 @@ var Bus = /** @class */ (function () {
                                         _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                     }
                                     ackdOrNackd = true;
+                                },
+                                defer: function () {
+                                    deferred = false;
                                 }
                             });
-                            if (!ackdOrNackd)
+                            if (!ackdOrNackd && !deferred)
                                 channel.ack(msg);
                         }
                         else {
@@ -235,6 +243,7 @@ var Bus = /** @class */ (function () {
                     handlers.filter(function (handler) { return handler.rxType.TypeID === msg.properties.type; }).forEach(function (handler) {
                         _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                         var ackdOrNackd = false;
+                        var deferred = false;
                         handler.handler(_msg, {
                             ack: function () {
                                 channel.ack(msg);
@@ -249,9 +258,12 @@ var Bus = /** @class */ (function () {
                                     _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                 }
                                 ackdOrNackd = true;
-                            }
+                            },
+                            defer: function () {
+                                deferred = true;
+                            },
                         });
-                        if (!ackdOrNackd)
+                        if (!ackdOrNackd && !deferred)
                             channel.ack(msg);
                     });
                 })

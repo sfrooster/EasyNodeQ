@@ -94,7 +94,7 @@ export class Bus implements IBus {
     public Subscribe(
         type: { TypeID: string },
         subscriberName: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void,
+        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void,
         withTopic: string = '#'):
         Promise<IConsumerDispose>
     {
@@ -123,6 +123,7 @@ export class Bus implements IBus {
                                     _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
                                     var ackdOrNackd = false;
+                                    var deferred = false;
 
                                     handler(_msg, {
                                         ack: () => {
@@ -138,10 +139,13 @@ export class Bus implements IBus {
                                                 this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                             }
                                             ackdOrNackd = true;
-                                        }
+                                        },
+                                        defer: () => {
+                                            deferred = true;
+                                        },
                                     });
 
-                                    if (!ackdOrNackd) channel.ack(msg);
+                                    if (!ackdOrNackd && !deferred) channel.ack(msg);
                                 }
                                 else {
                                     this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
@@ -184,7 +188,7 @@ export class Bus implements IBus {
     public Receive(
         rxType: { TypeID: string },
         queue: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void):
+        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void):
         Promise<IConsumerDispose>
     {
         var channel = null;
@@ -204,6 +208,7 @@ export class Bus implements IBus {
                                 _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
                                 var ackdOrNackd = false;
+                                var deferred = false;
 
                                 handler(_msg, {
                                     ack: () => {
@@ -219,10 +224,13 @@ export class Bus implements IBus {
                                             this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                         }
                                         ackdOrNackd = true;
+                                    },
+                                    defer: () => {
+                                        deferred = false;
                                     }
                                 });
 
-                                if (!ackdOrNackd) channel.ack(msg);
+                                if (!ackdOrNackd && !deferred) channel.ack(msg);
                             }
                             else {
                                 this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID))
@@ -254,7 +262,7 @@ export class Bus implements IBus {
 
     public ReceiveTypes(
         queue: string,
-        handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]):
+        handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void, defer: () => void }) => void }[]):
         Promise<IConsumerDispose>
     {
         var channel = null;
@@ -272,6 +280,7 @@ export class Bus implements IBus {
                             _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
                             var ackdOrNackd = false;
+                            var deferred = false;
 
                             handler.handler(_msg, {
                                 ack: () => {
@@ -287,10 +296,13 @@ export class Bus implements IBus {
                                         this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
                                     }
                                     ackdOrNackd = true;
-                                }
+                                },
+                                defer: () => {
+                                    deferred = true;
+                                },
                             });
 
-                            if (!ackdOrNackd) channel.ack(msg);
+                            if (!ackdOrNackd && !deferred) channel.ack(msg);
                         });
                     })
                         .then((ctag) => {

@@ -31,6 +31,7 @@ export declare class Bus implements IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
+        defer: () => void;
     }) => void, withTopic?: string): Promise<IConsumerDispose>;
     Send(queue: string, msg: {
         TypeID: string;
@@ -42,6 +43,7 @@ export declare class Bus implements IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
+        defer: () => void;
     }) => void): Promise<IConsumerDispose>;
     ReceiveTypes(queue: string, handlers: {
         rxType: {
@@ -52,6 +54,7 @@ export declare class Bus implements IBus {
         }, ackFns?: {
             ack: () => void;
             nack: () => void;
+            defer: () => void;
         }) => void;
     }[]): Promise<IConsumerDispose>;
     Request(request: {
