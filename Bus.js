@@ -104,12 +104,17 @@ var Bus = /** @class */ (function () {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                             var ackdOrNackd = false;
                             var deferred = false;
+                            var deferTimeout;
                             handler(_msg, {
                                 ack: function () {
+                                    if (deferred)
+                                        clearTimeout(deferTimeout);
                                     channel.ack(msg);
                                     ackdOrNackd = true;
                                 },
                                 nack: function () {
+                                    if (deferred)
+                                        clearTimeout(deferTimeout);
                                     if (!msg.fields.redelivered) {
                                         channel.nack(msg);
                                     }
@@ -119,8 +124,12 @@ var Bus = /** @class */ (function () {
                                     }
                                     ackdOrNackd = true;
                                 },
-                                defer: function () {
+                                defer: function (timeout) {
+                                    if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
                                     deferred = true;
+                                    deferTimeout = setTimeout(function () {
+                                        channel.ack(msg);
+                                    }, timeout);
                                 },
                             });
                             if (!ackdOrNackd && !deferred)
@@ -179,12 +188,17 @@ var Bus = /** @class */ (function () {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                             var ackdOrNackd = false;
                             var deferred = false;
+                            var deferTimeout;
                             handler(_msg, {
                                 ack: function () {
+                                    if (deferred)
+                                        clearTimeout(deferTimeout);
                                     channel.ack(msg);
                                     ackdOrNackd = true;
                                 },
                                 nack: function () {
+                                    if (deferred)
+                                        clearTimeout(deferTimeout);
                                     if (!msg.fields.redelivered) {
                                         channel.nack(msg);
                                     }
@@ -194,9 +208,13 @@ var Bus = /** @class */ (function () {
                                     }
                                     ackdOrNackd = true;
                                 },
-                                defer: function () {
-                                    deferred = false;
-                                }
+                                defer: function (timeout) {
+                                    if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
+                                    deferred = true;
+                                    deferTimeout = setTimeout(function () {
+                                        channel.ack(msg);
+                                    }, timeout);
+                                },
                             });
                             if (!ackdOrNackd && !deferred)
                                 channel.ack(msg);
@@ -244,12 +262,17 @@ var Bus = /** @class */ (function () {
                         _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                         var ackdOrNackd = false;
                         var deferred = false;
+                        var deferTimeout;
                         handler.handler(_msg, {
                             ack: function () {
+                                if (deferred)
+                                    clearTimeout(deferTimeout);
                                 channel.ack(msg);
                                 ackdOrNackd = true;
                             },
                             nack: function () {
+                                if (deferred)
+                                    clearTimeout(deferTimeout);
                                 if (!msg.fields.redelivered) {
                                     channel.nack(msg);
                                 }
@@ -259,8 +282,12 @@ var Bus = /** @class */ (function () {
                                 }
                                 ackdOrNackd = true;
                             },
-                            defer: function () {
+                            defer: function (timeout) {
+                                if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
                                 deferred = true;
+                                deferTimeout = setTimeout(function () {
+                                    channel.ack(msg);
+                                }, timeout);
                             },
                         });
                         if (!ackdOrNackd && !deferred)
@@ -475,6 +502,7 @@ var Bus = /** @class */ (function () {
     Bus.rpcExchange = 'easy_net_q_rpc';
     Bus.rpcQueueBase = 'easynetq.response.';
     Bus.defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
+    Bus.defaultDeferredAckTimeout = 10000;
     Bus.remove$type = function (obj, recurse) {
         if (recurse === void 0) { recurse = true; }
         try {

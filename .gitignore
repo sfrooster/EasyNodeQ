@@ -3,6 +3,5 @@ node_modules/
 typings/
 
 Bus.js.map
-tsconfig.json
 
 test.*

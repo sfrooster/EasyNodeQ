@@ -21,6 +21,7 @@ export class Bus implements IBus {
     private static rpcExchange = 'easy_net_q_rpc';
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
+    private static defaultDeferredAckTimeout = 10000;
 
     private Connection: Promise<any>;
     private rpcQueue = null;
@@ -124,13 +125,16 @@ export class Bus implements IBus {
 
                                     var ackdOrNackd = false;
                                     var deferred = false;
+                                    var deferTimeout;
 
                                     handler(_msg, {
                                         ack: () => {
+                                            if (deferred) clearTimeout(deferTimeout);
                                             channel.ack(msg);
                                             ackdOrNackd = true;
                                         },
                                         nack: () => {
+                                            if (deferred) clearTimeout(deferTimeout);
                                             if (!msg.fields.redelivered) {
                                                 channel.nack(msg);
                                             }
@@ -140,8 +144,11 @@ export class Bus implements IBus {
                                             }
                                             ackdOrNackd = true;
                                         },
-                                        defer: () => {
+                                        defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
                                             deferred = true;
+                                            deferTimeout = setTimeout(() => {
+                                                channel.ack(msg);
+                                            }, timeout);
                                         },
                                     });
 
@@ -209,13 +216,16 @@ export class Bus implements IBus {
 
                                 var ackdOrNackd = false;
                                 var deferred = false;
+                                var deferTimeout;
 
                                 handler(_msg, {
                                     ack: () => {
+                                        if (deferred) clearTimeout(deferTimeout);
                                         channel.ack(msg);
                                         ackdOrNackd = true;
                                     },
                                     nack: () => {
+                                        if (deferred) clearTimeout(deferTimeout);
                                         if (!msg.fields.redelivered) {
                                             channel.nack(msg);
                                         }
@@ -225,9 +235,12 @@ export class Bus implements IBus {
                                         }
                                         ackdOrNackd = true;
                                     },
-                                    defer: () => {
-                                        deferred = false;
-                                    }
+                                    defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                                        deferred = true;
+                                        deferTimeout = setTimeout(() => {
+                                            channel.ack(msg);
+                                        }, timeout);
+                                    },
                                 });
 
                                 if (!ackdOrNackd && !deferred) channel.ack(msg);
@@ -281,13 +294,16 @@ export class Bus implements IBus {
 
                             var ackdOrNackd = false;
                             var deferred = false;
+                            var deferTimeout;
 
                             handler.handler(_msg, {
                                 ack: () => {
+                                    if (deferred) clearTimeout(deferTimeout);
                                     channel.ack(msg);
                                     ackdOrNackd = true;
                                 },
                                 nack: () => {
+                                    if (deferred) clearTimeout(deferTimeout);
                                     if (!msg.fields.redelivered) {
                                         channel.nack(msg);
                                     }
@@ -297,8 +313,11 @@ export class Bus implements IBus {
                                     }
                                     ackdOrNackd = true;
                                 },
-                                defer: () => {
+                                defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
                                     deferred = true;
+                                    deferTimeout = setTimeout(() => {
+                                        channel.ack(msg);
+                                    }, timeout);
                                 },
                             });
 

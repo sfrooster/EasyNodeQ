@@ -8,6 +8,7 @@ export declare class Bus implements IBus {
     private static rpcExchange;
     private static rpcQueueBase;
     private static defaultErrorQueue;
+    private static defaultDeferredAckTimeout;
     private Connection;
     private rpcQueue;
     private rpcConsumerTag;
