@@ -204,6 +204,7 @@ export class Bus implements IBus {
             return Promise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
+                    channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
                 .then((okQueueReply) =>
@@ -284,6 +285,7 @@ export class Bus implements IBus {
             return Promise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
+                    channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
                 .then((okQueueReply) =>
