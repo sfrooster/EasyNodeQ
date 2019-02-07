@@ -178,6 +178,7 @@ var Bus = /** @class */ (function () {
             return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
+                channel.prefetch(_this.config.prefetch);
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
             })
                 .then(function (okQueueReply) {
@@ -253,6 +254,7 @@ var Bus = /** @class */ (function () {
             return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
+                channel.prefetch(_this.config.prefetch);
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
             })
                 .then(function (okQueueReply) {
