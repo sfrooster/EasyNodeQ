@@ -127,6 +127,17 @@ export class Bus implements IBus {
                                     var deferred = false;
                                     var deferTimeout;
 
+                                    const nackIfFirstDeliveryElseSendToErrorQueue = () => {
+                                        if (!msg.fields.redelivered) {
+                                            channel.nack(msg);
+                                        }
+                                        else {
+                                            //can only nack once
+                                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                        }
+                                        ackdOrNackd = true;
+                                    }
+
                                     handler(_msg, {
                                         ack: () => {
                                             if (deferred) clearTimeout(deferTimeout);
@@ -135,19 +146,12 @@ export class Bus implements IBus {
                                         },
                                         nack: () => {
                                             if (deferred) clearTimeout(deferTimeout);
-                                            if (!msg.fields.redelivered) {
-                                                channel.nack(msg);
-                                            }
-                                            else {
-                                                //can only nack once
-                                                this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                            }
-                                            ackdOrNackd = true;
+                                            nackIfFirstDeliveryElseSendToErrorQueue();
                                         },
                                         defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
                                             deferred = true;
                                             deferTimeout = setTimeout(() => {
-                                                channel.ack(msg);
+                                                nackIfFirstDeliveryElseSendToErrorQueue();
                                             }, timeout);
                                         },
                                     });
@@ -219,6 +223,17 @@ export class Bus implements IBus {
                                 var deferred = false;
                                 var deferTimeout;
 
+                                const nackIfFirstDeliveryElseSendToErrorQueue = () => {
+                                    if (!msg.fields.redelivered) {
+                                        channel.nack(msg);
+                                    }
+                                    else {
+                                        //can only nack once
+                                        this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                    }
+                                    ackdOrNackd = true;
+                                }
+
                                 handler(_msg, {
                                     ack: () => {
                                         if (deferred) clearTimeout(deferTimeout);
@@ -227,19 +242,12 @@ export class Bus implements IBus {
                                     },
                                     nack: () => {
                                         if (deferred) clearTimeout(deferTimeout);
-                                        if (!msg.fields.redelivered) {
-                                            channel.nack(msg);
-                                        }
-                                        else {
-                                            //can only nack once
-                                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                        }
-                                        ackdOrNackd = true;
+                                        nackIfFirstDeliveryElseSendToErrorQueue();
                                     },
                                     defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
                                         deferred = true;
                                         deferTimeout = setTimeout(() => {
-                                            channel.ack(msg);
+                                            nackIfFirstDeliveryElseSendToErrorQueue();
                                         }, timeout);
                                     },
                                 });
@@ -298,6 +306,17 @@ export class Bus implements IBus {
                             var deferred = false;
                             var deferTimeout;
 
+                            const nackIfFirstDeliveryElseSendToErrorQueue = () => {
+                                if (!msg.fields.redelivered) {
+                                    channel.nack(msg);
+                                }
+                                else {
+                                    //can only nack once
+                                    this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                }
+                                ackdOrNackd = true;
+                            }
+
                             handler.handler(_msg, {
                                 ack: () => {
                                     if (deferred) clearTimeout(deferTimeout);
@@ -306,19 +325,12 @@ export class Bus implements IBus {
                                 },
                                 nack: () => {
                                     if (deferred) clearTimeout(deferTimeout);
-                                    if (!msg.fields.redelivered) {
-                                        channel.nack(msg);
-                                    }
-                                    else {
-                                        //can only nack once
-                                        this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                    }
-                                    ackdOrNackd = true;
+                                    nackIfFirstDeliveryElseSendToErrorQueue();
                                 },
                                 defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
                                     deferred = true;
                                     deferTimeout = setTimeout(() => {
-                                        channel.ack(msg);
+                                        nackIfFirstDeliveryElseSendToErrorQueue();
                                     }, timeout);
                                 },
                             });
