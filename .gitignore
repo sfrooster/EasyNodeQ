@@ -1,7 +1,4 @@
 node_modules/
 .vscode/
-typings/
 
-Bus.js.map
-
-test.*
+bus.js.map

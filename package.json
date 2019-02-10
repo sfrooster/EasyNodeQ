@@ -1,10 +1,14 @@
 {
   "name": "easynodeq",
-  "version": "0.2.9",
   "description": "NodeJS implementation of EasyNetQ",
+  "author": {
+    "name": "Michael Haan",
+    "email": "haanmd@gmail.com"
+  },
+  "version": "0.5.0",
   "license": "MIT",
-  "main": "Bus.js",
-  "typings": "Bus",
+  "main": "./lib/bus.js",
+  "types": "./lib/bus.d.ts",
   "scripts": {
     "build": "tsc"
   },
@@ -12,18 +16,13 @@
     "type": "git",
     "url": "git://github.com/sfrooster/EasyNodeQ.git"
   },
-  "author": {
-    "name": "Michael Haan",
-    "email": "haanmd@gmail.com"
-  },
   "dependencies": {
     "amqplib": "^0.5.3",
-    "bluebird": "^3.3.4",
-    "node-uuid": "^1.4.3",
-    "tslint": "^5.12.1",
-    "typescript": "^3.3.1"
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "@types/node": "^10.12.21"
+    "@types/amqplib": "^0.5.9",
+    "@types/node": "^10.12.24",
+    "typescript": "^3.3.3"
   }
 }
