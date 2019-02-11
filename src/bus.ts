@@ -1,12 +1,28 @@
-﻿import * as util from 'util';
-import * as amqp from 'amqplib';
-import * as Promise from 'bluebird';
-import * as uuid from 'node-uuid';
+﻿import amqp from "amqplib";
+import _ from "lodash";
+import util from 'util';
+import uuid from "uuid";
 
+
+// ========================================================
+interface MsgType {
+    TypeID: string;
+}
+
+const isMsgType = (candidate: any): candidate is MsgType => _.isObjectLike(candidate) && _.isString(candidate.TypeID) && candidate.TypeID.length > 0;
+
+// type MsgHandler = (msg: MsgType) => void;
+interface AckExts {
+    ack(): void;
+    nack(): void;
+    defer(action: (..._: any[]) => Promise<boolean>): void;
+}
+type MsgHandlerExt = (msg: MsgType, ackFns: AckExts) => void;
+// ========================================================
 
 export class RabbitHutch {
     public static CreateBus(config: IBusConfig): IBus {
-        var bus = new Bus(config);
+        const bus = new Bus(config);
         return bus;
     }
 
@@ -16,65 +32,95 @@ export class RabbitHutch {
     }
 }
 
-export class Bus implements IBus {
+class Bus implements IBus {
 
     private static rpcExchange = 'easy_net_q_rpc';
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
     private static defaultDeferredAckTimeout = 10000;
 
-    private Connection: Promise<any>;
+    public Ready: PromiseLike<boolean>;
+
+    private Connection: amqp.Connection;
     private rpcQueue = null;
-    private rpcConsumerTag: Promise<IQueueConsumeReply>;
+    // private rpcConsumerTag: Promise<IQueueConsumeReply>;
     private rpcResponseHandlers = {};
 
-    protected Channels: { publishChannel: any; rpcChannel: any; } = {
-        publishChannel: null,
-        rpcChannel: null
+    protected Channels: { publishChannel: amqp.ConfirmChannel; rpcChannel: amqp.Channel; }
+
+    private pubMgr: {
+        publish(msg: MsgType, routingKey: string): Promise<boolean>;
+        sendToQueue(queue: string, msg: MsgType): Promise<boolean>;
     }
 
-    private pubChanUp: Promise<boolean>;
-    private rpcConsumerUp: Promise<boolean>;
-
-    private static remove$type = (obj, recurse:boolean = true) => {
-        try {
-            delete obj.$type;
-            var o;
-            if (recurse) {
-                for (o in obj) {
-                    if (obj.hasOwnProperty(o) && obj[o] === Object(obj[o])) Bus.remove$type(obj[o]);
-                }
-            }
-        }
-        catch (e) {
-            console.error('[Bus gulping error: %s]', e.message);
-        }
-    }
-
-    // TODO: handle error for msg (can't stringify error)
-    public SendToErrorQueue(msg: any, err: string = '', stack: string = '') {
-        var errMsg = {
-            TypeID: 'Common.ErrorMessage:Messages',
-            Message: msg === void 0 ? null : JSON.stringify(msg),
-            Error: err === void 0 ? null : err,
-            Stack: stack === void 0 ? null : stack
-        };
-
-        return this.pubChanUp
-            .then(() => this.Channels.publishChannel.assertQueue(Bus.defaultErrorQueue, { durable: true, exclusive: false, autoDelete: false }))
-            .then(() => this.Send(Bus.defaultErrorQueue, errMsg));
+    private subMgr: {
+        hydratePayload(payload: Buffer): MsgType | null;
     }
 
     constructor(public config: IBusConfig) {
         try {
-            this.Connection = Promise.resolve(amqp.connect(config.url + (config.vhost !== null ? '/' + config.vhost : '') + '?heartbeat=' + config.heartbeat));
+            this.Ready = (async () => {
+                try {
+                    const vhost = config.vhost !== null ? `/${config.vhost}` : "";
+                    const url = `${config.url}${vhost}?heartbeat=${config.heartbeat}`;
 
-            this.pubChanUp = this.Connection
-                .then((connection) => connection.createConfirmChannel())
-                .then((confChanReply) => {
-                    this.Channels.publishChannel = confChanReply;
+                    this.Connection = await amqp.connect(url);
+                    this.Channels.publishChannel = await this.Connection.createConfirmChannel();
+
+                    const dehydrateMsgType = (msg: MsgType) => JSON.stringify(msg, (k, v) => k === "$type" ? undefined : v);
+                    const hydratePayload = (payload: Buffer) => {
+                        const obj = JSON.parse(payload.toString(), (k, v) => k === "$type" ? undefined : v);
+                        return isMsgType(obj) ? obj : null;
+                    };
+
+                    this.pubMgr = (() => {
+                        this.Channels.publishChannel.on("close", (why) => {
+                            // TODO - recreate channel and wipe exchanges?
+                            console.log(why instanceof Error ? `error: ${why.name} - ${why.message}` : JSON.stringify(why));
+                        });
+                        const exchanges = new Set<string>();
+                        const publish = async (msg: MsgType, routingKey: string = "") => {
+                            try {
+                                if (!exchanges.has(msg.TypeID)) {
+                                    await this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false });
+                                    exchanges.add(msg.TypeID);
+                                }
+                                return await this.Channels.publishChannel.publish(msg.TypeID, routingKey, Buffer.from(dehydrateMsgType(msg)), { type: msg.TypeID });
+                            }
+                            catch (e) {
+                                // TODO: logger?
+                                console.log(`error: ${e.name} - ${e.message}`);
+                                return false;
+                            }
+                        };
+                        const sendToQueue = async (queue: string, msg: MsgType) => {
+                            try {
+                                return await this.Channels.publishChannel.sendToQueue(queue, Buffer.from(dehydrateMsgType(msg)), { type: msg.TypeID });
+                            }
+                            catch (e) {
+                                // TODO: logger?
+                                console.log(`error: ${e.name} - ${e.message}`);
+                                return false;
+                            }
+                        };
+
+                        return {
+                            publish: publish,
+                            sendToQueue: sendToQueue
+                        };
+                    })();
+
+                    this.subMgr = {
+                        hydratePayload: hydratePayload
+                    };
+
                     return true;
-                });
+                }
+                catch (e) {
+                    // TODO: logger?
+                    return false;
+                }
+            })();
         }
         catch (e) {
             console.log('[ERROR] - Connection problem %s', e);
@@ -82,22 +128,25 @@ export class Bus implements IBus {
     }
 
     // ========== Publish / Subscribe ==========
-    public Publish(msg: { TypeID: string }, withTopic:string = ''): Promise<boolean> {
-        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return Promise.reject<boolean>(util.format('%s is not a valid TypeID', msg.TypeID));
+    public async Publish(msg: MsgType, withTopic:string = ""): Promise<boolean> {
+        if (!isMsgType(msg)) {
+            return Promise.reject<boolean>(`${JSON.stringify} is not a valid MsgType`);
         }
 
-        return this.pubChanUp
-            .then(() => this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }))
-            .then((okExchangeReply) => this.Channels.publishChannel.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID }));
+        return await this.pubMgr.publish(msg, withTopic);
     }
 
-    public Subscribe(
-        type: { TypeID: string },
-        subscriberName: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void,
-        withTopic: string = '#'):
-        Promise<IConsumerDispose>
+    // public async Publish(msg: { TypeID: string }, withTopic: string = ''): Promise<boolean> {
+    //     if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+    //         return Promise.reject<boolean>(util.format('%s is not a valid TypeID', msg.TypeID));
+    //     }
+
+    //     return this.pubChanUp
+    //         .then(() => this.Channels.publishChannel.assertExchange(msg.TypeID, 'topic', { durable: true, autoDelete: false }))
+    //         .then((okExchangeReply) => this.Channels.publishChannel.publish(msg.TypeID, withTopic, Bus.ToBuffer(msg), { type: msg.TypeID }));
+    // }
+
+    public async Subscribe(type: MsgType, subscriberName: string, handler: MsgHandlerExt, withTopic: string = '#'): Promise<IConsumerDispose>
     {
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
             return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
@@ -107,12 +156,69 @@ export class Bus implements IBus {
             return Promise.reject('xyz is not a valid function');
         }
 
-        var queueID = type.TypeID + '_' + subscriberName;
+        const queueID = `${type.TypeID}_${subscriberName}`;
+        const channel = await (await this.Connection).createChannel();
+
+        channel.prefetch(this.config.prefetch); //why do we prefetch here and not wait on the promise?
+
+        await channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false });
+        await channel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false });
+        await channel.bindQueue(queueID, type.TypeID, withTopic);
+
+        const ctag = await channel.consume(queueID, (msg: amqp.ConsumeMessage | null) => {
+            // TODO - why would this equal null?
+            if (msg !== null) {
+                const _msg = this.subMgr.hydratePayload(msg.content)!; // TODO - NO GOOD!!!!
+
+                if (msg.properties.type === type.TypeID) {
+                    _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events - is this still valid?
+
+                    var ackdOrNackd = false;
+                    var deferred = false;
+                    var deferTimeout;
+
+                    const nackIfFirstDeliveryElseSendToErrorQueue = () => {
+                        if (!msg.fields.redelivered) {
+                            channel.nack(msg);
+                        }
+                        else {
+                            //can only nack once
+                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                        }
+                        ackdOrNackd = true;
+                    }
+
+                    handler(_msg, {
+                        ack: () => {
+                            if (deferred) clearTimeout(deferTimeout);
+                            channel.ack(msg);
+                            ackdOrNackd = true;
+                        },
+                        nack: () => {
+                            if (deferred) clearTimeout(deferTimeout);
+                            nackIfFirstDeliveryElseSendToErrorQueue();
+                        },
+                        defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                            deferred = true;
+                            deferTimeout = setTimeout(() => {
+                                nackIfFirstDeliveryElseSendToErrorQueue();
+                            }, timeout);
+                        },
+                    });
+
+                    if (!ackdOrNackd && !deferred) channel.ack(msg);
+                }
+                else {
+                    this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
+                }
+            }
+        });
 
         return this.Connection.then((connection) => {
             return Promise.resolve(connection.createChannel())
                 .then((channel) => {
                     channel.prefetch(this.config.prefetch);
+
                     return channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false })
                         .then(() => channel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false }))
                         .then(() => channel.bindQueue(queueID, type.TypeID, withTopic))
@@ -187,20 +293,26 @@ export class Bus implements IBus {
     }
 
     // ========== Send / Receive ==========
-    public Send(queue: string, msg: { TypeID: string }): Promise<boolean> {
-        if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
-            return Promise.reject<boolean>(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+    public async Send(queue: string, msg: MsgType): Promise<boolean> {
+        if (!isMsgType(msg)) {
+            return Promise.reject<boolean>(`${JSON.stringify} is not a valid MsgType`);
         }
 
-        return this.pubChanUp
-            .then(() => this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }));
+        return await this.pubMgr.sendToQueue(queue, msg);
     }
 
-    public Receive(
-        rxType: { TypeID: string },
-        queue: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void):
-        Promise<IConsumerDispose>
+    // public Send(queue: string, msg: { TypeID: string }): Promise<boolean> {
+    //     if (typeof msg.TypeID !== 'string' || msg.TypeID.length === 0) {
+    //         return Promise.reject<boolean>(util.format('%s is not a valid TypeID', JSON.stringify(msg.TypeID)));
+    //     }
+
+    //     return this.pubChanUp
+    //         .then(() => this.Channels.publishChannel.sendToQueue(queue, Bus.ToBuffer(msg), { type: msg.TypeID }));
+    // }
+
+
+    // public Receive(rxType: { TypeID: string }, queue: string, handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void): Promise<IConsumerDispose>
+    public Receive(rxType: MsgType, queue: string, handler: MsgHandlerExt): Promise<IConsumerDispose>
     {
         var channel = null;
 
@@ -554,20 +666,39 @@ export class Bus implements IBus {
                 });
     }
 
+    // TODO: handle error for msg (can't stringify error)
+    public SendToErrorQueue(msg: any, err: string = '', stack: string = '') {
+        const errMsg = {
+            TypeID: 'Common.ErrorMessage:Messages',
+            Message: msg === void 0 ? null : JSON.stringify(msg),
+            Error: err === void 0 ? null : err,
+            Stack: stack === void 0 ? null : stack
+        };
 
-    // ========== Etc  ==========
-    private static ToBuffer(obj: any): Buffer {
-        Bus.remove$type(obj, false);
-        return Buffer.from(JSON.stringify(obj));
+        return this.pubChanUp
+            .then(() => this.Channels.publishChannel.assertQueue(Bus.defaultErrorQueue, { durable: true, exclusive: false, autoDelete: false }))
+            .then(() => this.Send(Bus.defaultErrorQueue, errMsg));
     }
 
-    private static FromSubscription(obj: IPublishedObj): any {
+    // ========== Etc  ==========
+    // private static ToBuffer(obj: any): Buffer {
+    //     Bus.remove$type(obj, false);
+    //     return Buffer.from(JSON.stringify(obj));
+    // }
+
+    /*private static FromSubscription(obj: IPublishedObj): any {
         //fields: "{"consumerTag":"amq.ctag-QreMJ-zvC07EW2EKtWZhmQ","deliveryTag":1,"redelivered":false,"exchange":"","routingKey":"easynetq.response.0303b47c-2229-4557-9218-30c99c67f8c9"}"
         //props:  "{"headers":{},"deliveryMode":1,"correlationId":"14ac579e-048b-4c30-b909-50841cce3e44","type":"Common.TestMessageRequestAddValueResponse:Findly"}"
         var msg = JSON.parse(obj.content.toString());
         Bus.remove$type(msg);
         return msg;
-    }
+    }*/
+
+    // private static FromSubscription(obj: amqp.ConsumeMessage): any {
+    //     var msg = JSON.parse(obj.content.toString());
+    //     Bus.remove$type(msg);
+    //     return msg;
+    // }
 }
 
 export class ExtendedBus extends Bus implements IExtendedBus {
@@ -638,6 +769,54 @@ interface IPublishedObj {
     fields: any;
     properties: any;
 }
+
+/*
+interface Message {
+    content: Buffer;
+    fields: MessageFields;
+    properties: MessageProperties;
+    fields: {
+        deliveryTag: number;
+        redelivered: boolean;
+        exchange: string;
+        routingKey: string;
+    }
+}
+
+ConsumeMessage extends Message {
+    content: Buffer;
+    fields: {
+        messageCount?: number;
+        consumerTag?: string;
+        deliveryTag: number;
+        redelivered: boolean;
+        exchange: string;
+        routingKey: string;
+    }
+    properties: {
+        contentType: any | undefined;
+        contentEncoding: any | undefined;
+        headers: {
+            "x-first-death-exchange"?: string;
+            "x-first-death-queue"?: string;
+            "x-first-death-reason"?: string;
+            "x-death"?: XDeath[];
+            [key: string]: any;
+        }
+        deliveryMode: any | undefined;
+        priority: any | undefined;
+        correlationId: any | undefined;
+        replyTo: any | undefined;
+        expiration: any | undefined;
+        messageId: any | undefined;
+        timestamp: any | undefined;
+        type: any | undefined;
+        userId: any | undefined;
+        appId: any | undefined;
+        clusterId: any | undefined;
+    }
+}
+*/
 
 export interface IQueueConsumeReply {
     consumerTag: string;

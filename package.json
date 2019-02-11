@@ -7,10 +7,14 @@
   },
   "version": "0.5.0",
   "license": "MIT",
+  "directories": {
+    "lib": "./lib"
+  },
   "main": "./lib/bus.js",
   "types": "./lib/bus.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "clean": "rm -rf ${npm_package_directories_lib}/*"
   },
   "repository": {
     "type": "git",
@@ -18,10 +22,12 @@
   },
   "dependencies": {
     "amqplib": "^0.5.3",
+    "lodash": "^4.17.11",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
     "@types/amqplib": "^0.5.9",
+    "@types/lodash": "^4.14.120",
     "@types/node": "^10.12.24",
     "typescript": "^3.3.3"
   }
