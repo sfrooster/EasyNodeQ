@@ -7,14 +7,15 @@
   },
   "version": "0.5.0",
   "license": "MIT",
-  "directories": {
-    "lib": "./lib"
-  },
   "main": "./lib/bus.js",
   "types": "./lib/bus.d.ts",
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf ${npm_package_directories_lib}/*"
+    "clean-lib": "{ test -d ./lib && rm -rf ./lib/*; } || exit 0",
+    "clean-mod": "{ test -d ./node_modules && rm -rf ./node_modules; }  || exit 0",
+    "preinit": "npm run clean-mod",
+    "init": "npm install",
+    "upgrade": "npm-check --update"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,7 @@
     "@types/amqplib": "^0.5.9",
     "@types/lodash": "^4.14.120",
     "@types/node": "^10.12.24",
+    "npm-check": "^5.9.0",
     "typescript": "^3.3.3"
   }
 }

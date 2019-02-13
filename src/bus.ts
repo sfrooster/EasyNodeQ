@@ -1,6 +1,5 @@
 ﻿import amqp from "amqplib";
 import _ from "lodash";
-import util from 'util';
 import uuid from "uuid";
 
 
@@ -12,10 +11,11 @@ interface MsgType {
 const isMsgType = (candidate: any): candidate is MsgType => _.isObjectLike(candidate) && _.isString(candidate.TypeID) && candidate.TypeID.length > 0;
 
 // type MsgHandler = (msg: MsgType) => void;
+type deferGuardType = number | (() => Promise<boolean>);
 interface AckExts {
     ack(): void;
     nack(): void;
-    defer(action: (..._: any[]) => Promise<boolean>): void;
+    defer(guard: deferGuardType): void;
 }
 type MsgHandlerExt = (msg: MsgType, ackFns: AckExts) => void;
 // ========================================================
@@ -149,12 +149,12 @@ class Bus implements IBus {
     public async Subscribe(type: MsgType, subscriberName: string, handler: MsgHandlerExt, withTopic: string = '#'): Promise<IConsumerDispose>
     {
         if (typeof type.TypeID !== 'string' || type.TypeID.length === 0) {
-            return Promise.reject(util.format('%s is not a valid TypeID', type.TypeID));
+            return Promise.reject(`${type.TypeID} is not a valid TypeID`);
         }
 
-        if (typeof handler !== 'function') {
-            return Promise.reject('xyz is not a valid function');
-        }
+        // if (typeof handler !== 'function') {
+        //     return Promise.reject('xyz is not a valid function');
+        // }
 
         const queueID = `${type.TypeID}_${subscriberName}`;
         const channel = await (await this.Connection).createChannel();
@@ -173,9 +173,15 @@ class Bus implements IBus {
                 if (msg.properties.type === type.TypeID) {
                     _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events - is this still valid?
 
-                    var ackdOrNackd = false;
-                    var deferred = false;
-                    var deferTimeout;
+                    let ackdOrNackd = false;
+                    let deferred = false;
+                    let deferTimeout: NodeJS.Timeout;
+
+                    const ack = () => {
+                        if (deferred) clearTimeout(deferTimeout);
+                        channel.ack(msg);
+                        ackdOrNackd = true;
+                    };
 
                     const nackIfFirstDeliveryElseSendToErrorQueue = () => {
                         if (!msg.fields.redelivered) {
@@ -183,10 +189,15 @@ class Bus implements IBus {
                         }
                         else {
                             //can only nack once
-                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                            this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
                         }
                         ackdOrNackd = true;
-                    }
+                    };
+
+                    const nack = () => {
+                        if (deferred) clearTimeout(deferTimeout);
+                        nackIfFirstDeliveryElseSendToErrorQueue();
+                    };
 
                     handler(_msg, {
                         ack: () => {
@@ -198,98 +209,58 @@ class Bus implements IBus {
                             if (deferred) clearTimeout(deferTimeout);
                             nackIfFirstDeliveryElseSendToErrorQueue();
                         },
-                        defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                        defer: (guard) => {
+                            if (_.isNumber(guard)) {
+                                if (!_.isSafeInteger(guard)) {
+                                    // TODO - do what?
+                                }
+                                deferTimeout = setTimeout(_ => nackIfFirstDeliveryElseSendToErrorQueue(), guard);
+                            }
+                            else {
+                                guard().then(success => success ? )
+                            }
                             deferred = true;
-                            deferTimeout = setTimeout(() => {
-                                nackIfFirstDeliveryElseSendToErrorQueue();
-                            }, timeout);
+
                         },
                     });
 
                     if (!ackdOrNackd && !deferred) channel.ack(msg);
                 }
                 else {
-                    this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
+                    this.SendToErrorQueue(_msg, `mismatched TypeID: ${msg.properties.type} != ${type.TypeID}`);
                 }
             }
         });
 
-        return this.Connection.then((connection) => {
-            return Promise.resolve(connection.createChannel())
-                .then((channel) => {
-                    channel.prefetch(this.config.prefetch);
-
-                    return channel.assertQueue(queueID, { durable: true, exclusive: false, autoDelete: false })
-                        .then(() => channel.assertExchange(type.TypeID, 'topic', { durable: true, autoDelete: false }))
-                        .then(() => channel.bindQueue(queueID, type.TypeID, withTopic))
-                        .then(() => channel.consume(queueID, (msg: IPublishedObj) => {
-                            if (msg) {
-                                var _msg = Bus.FromSubscription(msg);
-
-                                if (msg.properties.type === type.TypeID) {
-                                    _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
-
-                                    var ackdOrNackd = false;
-                                    var deferred = false;
-                                    var deferTimeout;
-
-                                    const nackIfFirstDeliveryElseSendToErrorQueue = () => {
-                                        if (!msg.fields.redelivered) {
-                                            channel.nack(msg);
-                                        }
-                                        else {
-                                            //can only nack once
-                                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                        }
-                                        ackdOrNackd = true;
-                                    }
-
-                                    handler(_msg, {
-                                        ack: () => {
-                                            if (deferred) clearTimeout(deferTimeout);
-                                            channel.ack(msg);
-                                            ackdOrNackd = true;
-                                        },
-                                        nack: () => {
-                                            if (deferred) clearTimeout(deferTimeout);
-                                            nackIfFirstDeliveryElseSendToErrorQueue();
-                                        },
-                                        defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
-                                            deferred = true;
-                                            deferTimeout = setTimeout(() => {
-                                                nackIfFirstDeliveryElseSendToErrorQueue();
-                                            }, timeout);
-                                        },
-                                    });
-
-                                    if (!ackdOrNackd && !deferred) channel.ack(msg);
-                                }
-                                else {
-                                    this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
-                                }
-                            }
-                        }))
-                        .then((ctag) => {
-                            return {
-                                cancelConsumer: () => {
-                                    return channel.cancel(ctag.consumerTag)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                },
-                                deleteQueue: () => {
-                                    return channel.deleteQueue(queueID)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                },
-                                purgeQueue: () => {
-                                    return channel.purgeQueue(queueID)
-                                        .then(() => true)
-                                        .catch(() => false);
-                                }
-                            }
-                        });
-                })
-            });
+        return {
+            cancelConsumer: async () => {
+                try {
+                    await channel.cancel(ctag.consumerTag);
+                    return true;
+                }
+                catch (e) {
+                    return false;
+                }
+            },
+            deleteQueue: async () => {
+                try {
+                    await channel.deleteQueue(queueID);
+                    return true;
+                }
+                catch (e) {
+                    return false;
+                }
+            },
+            purgeQueue: async () => {
+                try {
+                    await channel.purgeQueue(queueID);
+                    return true;
+                }
+                catch (e) {
+                    return false;
+                }
+            }
+        };
     }
 
     // ========== Send / Receive ==========
@@ -323,7 +294,7 @@ class Bus implements IBus {
                     channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
-                .then((okQueueReply) =>
+                .then(_ =>
                     channel.consume(queue, (msg) => {
                         if (msg) {
                             var _msg = Bus.FromSubscription(msg);
@@ -367,7 +338,7 @@ class Bus implements IBus {
                                 if (!ackdOrNackd && !deferred) channel.ack(msg);
                             }
                             else {
-                                this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID))
+                                this.SendToErrorQueue(_msg, `mismatched TypeID: ${msg.properties.type} != ${rxType.TypeID}`);
                             }
                         }
                     })
@@ -408,7 +379,7 @@ class Bus implements IBus {
                     channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
-                .then((okQueueReply) =>
+                .then(_ =>
                     channel.consume(queue, (msg: IPublishedObj) => {
                         var _msg = Bus.FromSubscription(msg);
                         handlers.filter((handler) => handler.rxType.TypeID === msg.properties.type).forEach((handler) => {
@@ -500,7 +471,7 @@ class Bus implements IBus {
                 this.rpcQueue = Bus.rpcQueueBase + uuid.v4();
                 return this.Channels.rpcChannel.assertQueue(this.rpcQueue, { durable: false, exclusive: true, autoDelete: true });
             })
-            .then((okQueueReply) => {
+            .then(_ => {
                 return this.Channels.rpcChannel.consume(this.rpcQueue, (msg: IPublishedObj): void => {
                     if (this.rpcResponseHandlers[msg.properties.correlationId]) {
                         this.Channels.rpcChannel.ack(msg);
@@ -523,9 +494,9 @@ class Bus implements IBus {
             });
 
         return this.rpcConsumerUp
-            .then(() => this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }))
-            .then((okExchangeReply) => this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: this.rpcQueue, correlationId: correlationID }))
-            .then((ackd) => responsePromise);
+            .then(_ => this.Channels.publishChannel.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false }))
+            .then(_ => this.Channels.publishChannel.publish(Bus.rpcExchange, request.TypeID, Bus.ToBuffer(request), { type: request.TypeID, replyTo: this.rpcQueue, correlationId: correlationID }))
+            .then(_ => responsePromise);
     }
 
     public Respond(
@@ -537,9 +508,9 @@ class Bus implements IBus {
             .then((connection) => connection.createChannel())
             .then((responseChan) => {
                 return responseChan.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })
-                    .then((okExchangeReply) => responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }))
-                    .then((okQueueReply) => responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID))
-                    .then((okBindReply) => responseChan.consume(rqType.TypeID, (reqMsg: IPublishedObj) => {
+                    .then(_ => responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }))
+                    .then(_ => responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID))
+                    .then(_ => responseChan.consume(rqType.TypeID, (reqMsg: IPublishedObj) => {
                         var msg = Bus.FromSubscription(reqMsg);
 
                         if (reqMsg.properties.type === rqType.TypeID) {
@@ -571,7 +542,7 @@ class Bus implements IBus {
                             if (!ackdOrNackd) responseChan.ack(reqMsg);
                         }
                         else {
-                            this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID))
+                            this.SendToErrorQueue(msg, `mismatched TypeID: ${reqMsg.properties.type} != ${rqType.TypeID}`);
                         }
                     })
                         .then((ctag) => {
@@ -606,9 +577,9 @@ class Bus implements IBus {
             .then((connection) => connection.createChannel())
             .then((responseChan) => {
                 return responseChan.assertExchange(Bus.rpcExchange, 'direct', { durable: true, autoDelete: false })
-                    .then((okExchangeReply) => responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }))
-                    .then((okQueueReply) => responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID))
-                    .then((okBindReply) => responseChan.consume(rqType.TypeID, (reqMsg: IPublishedObj) => {
+                    .then(_ => responseChan.assertQueue(rqType.TypeID, { durable: true, exclusive: false, autoDelete: false }))
+                    .then(_ => responseChan.bindQueue(rqType.TypeID, Bus.rpcExchange, rqType.TypeID))
+                    .then(_ => responseChan.consume(rqType.TypeID, (reqMsg: IPublishedObj) => {
                         var msg = Bus.FromSubscription(reqMsg);
 
                         if (reqMsg.properties.type === rqType.TypeID) {
@@ -641,7 +612,7 @@ class Bus implements IBus {
                             });
                         }
                         else {
-                            this.SendToErrorQueue(msg, util.format('mismatched TypeID: %s !== %s', reqMsg.properties.type, rqType.TypeID))
+                            this.SendToErrorQueue(msg, `mismatched TypeID: ${reqMsg.properties.type} != ${rqType.TypeID}`);
                         }
                     })
                     .then((ctag) => {
