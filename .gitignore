@@ -1,4 +1,3 @@
 node_modules/
 .vscode/
-
-bus.js.map
+lib/

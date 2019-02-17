@@ -27,9 +27,9 @@
     "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "@types/amqplib": "^0.5.9",
-    "@types/lodash": "^4.14.120",
-    "@types/node": "^10.12.24",
+    "@types/amqplib": "^0.5.10",
+    "@types/lodash": "^4.14.121",
+    "@types/node": "^11.9.4",
     "npm-check": "^5.9.0",
     "typescript": "^3.3.3"
   }
