@@ -102,40 +102,39 @@ var Bus = /** @class */ (function () {
                         var _msg = Bus.FromSubscription(msg);
                         if (msg.properties.type === type.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                            var ackdOrNackd = false;
-                            var deferred = false;
-                            var deferTimeout;
-                            var nackIfFirstDeliveryElseSendToErrorQueue_1 = function () {
+                            var ackdOrNackd_1 = false;
+                            var deferred_1 = false;
+                            var deferTimeout_1;
+                            var ack = function () {
+                                if (deferred_1)
+                                    clearTimeout(deferTimeout_1);
+                                channel.ack(msg);
+                                ackdOrNackd_1 = true;
+                            };
+                            var nack_1 = function () {
+                                if (deferred_1)
+                                    clearTimeout(deferTimeout_1);
                                 if (!msg.fields.redelivered) {
                                     channel.nack(msg);
                                 }
                                 else {
                                     //can only nack once
-                                    _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                    _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
                                 }
-                                ackdOrNackd = true;
+                                ackdOrNackd_1 = true;
                             };
                             handler(_msg, {
-                                ack: function () {
-                                    if (deferred)
-                                        clearTimeout(deferTimeout);
-                                    channel.ack(msg);
-                                    ackdOrNackd = true;
-                                },
-                                nack: function () {
-                                    if (deferred)
-                                        clearTimeout(deferTimeout);
-                                    nackIfFirstDeliveryElseSendToErrorQueue_1();
-                                },
+                                ack: ack,
+                                nack: nack_1,
                                 defer: function (timeout) {
                                     if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
-                                    deferred = true;
-                                    deferTimeout = setTimeout(function () {
-                                        nackIfFirstDeliveryElseSendToErrorQueue_1();
+                                    deferred_1 = true;
+                                    deferTimeout_1 = setTimeout(function () {
+                                        nack_1();
                                     }, timeout);
                                 },
                             });
-                            if (!ackdOrNackd && !deferred)
+                            if (!ackdOrNackd_1 && !deferred_1)
                                 channel.ack(msg);
                         }
                         else {
@@ -190,40 +189,39 @@ var Bus = /** @class */ (function () {
                         var _msg = Bus.FromSubscription(msg);
                         if (msg.properties.type === rxType.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                            var ackdOrNackd = false;
-                            var deferred = false;
-                            var deferTimeout;
-                            var nackIfFirstDeliveryElseSendToErrorQueue_2 = function () {
+                            var ackdOrNackd_2 = false;
+                            var deferred_2 = false;
+                            var deferTimeout_2;
+                            var ack = function () {
+                                if (deferred_2)
+                                    clearTimeout(deferTimeout_2);
+                                channel.ack(msg);
+                                ackdOrNackd_2 = true;
+                            };
+                            var nack_2 = function () {
+                                if (deferred_2)
+                                    clearTimeout(deferTimeout_2);
                                 if (!msg.fields.redelivered) {
                                     channel.nack(msg);
                                 }
                                 else {
                                     //can only nack once
-                                    _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                    _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
                                 }
-                                ackdOrNackd = true;
+                                ackdOrNackd_2 = true;
                             };
                             handler(_msg, {
-                                ack: function () {
-                                    if (deferred)
-                                        clearTimeout(deferTimeout);
-                                    channel.ack(msg);
-                                    ackdOrNackd = true;
-                                },
-                                nack: function () {
-                                    if (deferred)
-                                        clearTimeout(deferTimeout);
-                                    nackIfFirstDeliveryElseSendToErrorQueue_2();
-                                },
+                                ack: ack,
+                                nack: nack_2,
                                 defer: function (timeout) {
                                     if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
-                                    deferred = true;
-                                    deferTimeout = setTimeout(function () {
-                                        nackIfFirstDeliveryElseSendToErrorQueue_2();
+                                    deferred_2 = true;
+                                    deferTimeout_2 = setTimeout(function () {
+                                        nack_2();
                                     }, timeout);
                                 },
                             });
-                            if (!ackdOrNackd && !deferred)
+                            if (!ackdOrNackd_2 && !deferred_2)
                                 channel.ack(msg);
                         }
                         else {
@@ -271,33 +269,32 @@ var Bus = /** @class */ (function () {
                         var ackdOrNackd = false;
                         var deferred = false;
                         var deferTimeout;
-                        var nackIfFirstDeliveryElseSendToErrorQueue = function () {
+                        var ack = function () {
+                            if (deferred)
+                                clearTimeout(deferTimeout);
+                            channel.ack(msg);
+                            ackdOrNackd = true;
+                        };
+                        var nack = function () {
+                            if (deferred)
+                                clearTimeout(deferTimeout);
                             if (!msg.fields.redelivered) {
                                 channel.nack(msg);
                             }
                             else {
                                 //can only nack once
-                                _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
+                                _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
                             }
                             ackdOrNackd = true;
                         };
                         handler.handler(_msg, {
-                            ack: function () {
-                                if (deferred)
-                                    clearTimeout(deferTimeout);
-                                channel.ack(msg);
-                                ackdOrNackd = true;
-                            },
-                            nack: function () {
-                                if (deferred)
-                                    clearTimeout(deferTimeout);
-                                nackIfFirstDeliveryElseSendToErrorQueue();
-                            },
+                            ack: ack,
+                            nack: nack,
                             defer: function (timeout) {
                                 if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
                                 deferred = true;
                                 deferTimeout = setTimeout(function () {
-                                    nackIfFirstDeliveryElseSendToErrorQueue();
+                                    nack();
                                 }, timeout);
                             },
                         });
