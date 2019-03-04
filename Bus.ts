@@ -1,6 +1,4 @@
-﻿/// <reference path="./typings/index.d.ts" />
-
-import * as util from 'util';
+﻿import * as util from 'util';
 import * as amqp from 'amqplib';
 import * as Promise from 'bluebird';
 import * as uuid from 'node-uuid';
@@ -23,7 +21,8 @@ export class Bus implements IBus {
     private static rpcExchange = 'easy_net_q_rpc';
     private static rpcQueueBase = 'easynetq.response.';
     private static defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
-    
+    private static defaultDeferredAckTimeout = 10000;
+
     private Connection: Promise<any>;
     private rpcQueue = null;
     private rpcConsumerTag: Promise<IQueueConsumeReply>;
@@ -96,7 +95,7 @@ export class Bus implements IBus {
     public Subscribe(
         type: { TypeID: string },
         subscriberName: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void,
+        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void,
         withTopic: string = '#'):
         Promise<IConsumerDispose>
     {
@@ -124,26 +123,40 @@ export class Bus implements IBus {
                                 if (msg.properties.type === type.TypeID) {
                                     _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
-                                    var ackdOrNackd = false;
+                                    let ackdOrNackd = false;
+                                    let deferred = false;
+                                    let deferTimeout: NodeJS.Timeout;
+
+                                    const ack = () => {
+                                        if (deferred) clearTimeout(deferTimeout);
+                                        channel.ack(msg);
+                                        ackdOrNackd = true;
+                                    };
+
+                                    const nack = () => {
+                                        if (deferred) clearTimeout(deferTimeout);
+                                        if (!msg.fields.redelivered) {
+                                            channel.nack(msg);
+                                        }
+                                        else {
+                                            //can only nack once
+                                            this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                                        }
+                                        ackdOrNackd = true;
+                                    };
 
                                     handler(_msg, {
-                                        ack: () => {
-                                            channel.ack(msg);
-                                            ackdOrNackd = true;
+                                        ack,
+                                        nack,
+                                        defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                                            deferred = true;
+                                            deferTimeout = setTimeout(() => {
+                                                nack();
+                                            }, timeout);
                                         },
-                                        nack: () => {
-                                            if (!msg.fields.redelivered) {
-                                                channel.nack(msg);
-                                            }
-                                            else {
-                                                //can only nack once
-                                                this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                            }
-                                            ackdOrNackd = true;
-                                        }
                                     });
 
-                                    if (!ackdOrNackd) channel.ack(msg);
+                                    if (!ackdOrNackd && !deferred) channel.ack(msg);
                                 }
                                 else {
                                     this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, type.TypeID));
@@ -186,7 +199,7 @@ export class Bus implements IBus {
     public Receive(
         rxType: { TypeID: string },
         queue: string,
-        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void):
+        handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void; defer: () => void }) => void):
         Promise<IConsumerDispose>
     {
         var channel = null;
@@ -195,6 +208,7 @@ export class Bus implements IBus {
             return Promise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
+                    channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
                 .then((okQueueReply) =>
@@ -205,26 +219,40 @@ export class Bus implements IBus {
                             if (msg.properties.type === rxType.TypeID) {
                                 _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
-                                var ackdOrNackd = false;
+                                let ackdOrNackd = false;
+                                let deferred = false;
+                                let deferTimeout: NodeJS.Timeout;
+
+                                const ack = () => {
+                                    if (deferred) clearTimeout(deferTimeout);
+                                    channel.ack(msg);
+                                    ackdOrNackd = true;
+                                };
+
+                                const nack = () => {
+                                    if (deferred) clearTimeout(deferTimeout);
+                                    if (!msg.fields.redelivered) {
+                                        channel.nack(msg);
+                                    }
+                                    else {
+                                        //can only nack once
+                                        this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                                    }
+                                    ackdOrNackd = true;
+                                };
 
                                 handler(_msg, {
-                                    ack: () => {
-                                        channel.ack(msg);
-                                        ackdOrNackd = true;
+                                    ack,
+                                    nack,
+                                    defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                                        deferred = true;
+                                        deferTimeout = setTimeout(() => {
+                                            nack();
+                                        }, timeout);
                                     },
-                                    nack: () => {
-                                        if (!msg.fields.redelivered) {
-                                            channel.nack(msg);
-                                        }
-                                        else {
-                                            //can only nack once
-                                            this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                        }
-                                        ackdOrNackd = true;
-                                    }
                                 });
 
-                                if (!ackdOrNackd) channel.ack(msg);
+                                if (!ackdOrNackd && !deferred) channel.ack(msg);
                             }
                             else {
                                 this.SendToErrorQueue(_msg, util.format('mismatched TypeID: %s !== %s', msg.properties.type, rxType.TypeID))
@@ -256,7 +284,7 @@ export class Bus implements IBus {
 
     public ReceiveTypes(
         queue: string,
-        handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void }) => void }[]):
+        handlers: { rxType: { TypeID: string }; handler: (msg: { TypeID: string }, ackFns?: { ack: () => void; nack: () => void, defer: () => void }) => void }[]):
         Promise<IConsumerDispose>
     {
         var channel = null;
@@ -265,6 +293,7 @@ export class Bus implements IBus {
             return Promise.resolve(connection.createChannel())
                 .then((chanReply) => {
                     channel = chanReply;
+                    channel.prefetch(this.config.prefetch);
                     return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
                 })
                 .then((okQueueReply) =>
@@ -273,26 +302,40 @@ export class Bus implements IBus {
                         handlers.filter((handler) => handler.rxType.TypeID === msg.properties.type).forEach((handler) => {
                             _msg.TypeID = _msg.TypeID || msg.properties.type;  //so we can get non-BusMessage events
 
-                            var ackdOrNackd = false;
+                            let ackdOrNackd = false;
+                            let deferred = false;
+                            let deferTimeout: NodeJS.Timeout;
+
+                            const ack = () => {
+                                if (deferred) clearTimeout(deferTimeout);
+                                channel.ack(msg);
+                                ackdOrNackd = true;
+                            };
+
+                            const nack = () => {
+                                if (deferred) clearTimeout(deferTimeout);
+                                if (!msg.fields.redelivered) {
+                                    channel.nack(msg);
+                                }
+                                else {
+                                    //can only nack once
+                                    this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                                }
+                                ackdOrNackd = true;
+                            };
 
                             handler.handler(_msg, {
-                                ack: () => {
-                                    channel.ack(msg);
-                                    ackdOrNackd = true;
+                                ack,
+                                nack,
+                                defer: (timeout: number = Bus.defaultDeferredAckTimeout) => {
+                                    deferred = true;
+                                    deferTimeout = setTimeout(() => {
+                                        nack();
+                                    }, timeout);
                                 },
-                                nack: () => {
-                                    if (!msg.fields.redelivered) {
-                                        channel.nack(msg);
-                                    }
-                                    else {
-                                        //can only nack once
-                                        this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                    }
-                                    ackdOrNackd = true;
-                                }
                             });
 
-                            if (!ackdOrNackd) channel.ack(msg);
+                            if (!ackdOrNackd && !deferred) channel.ack(msg);
                         });
                     })
                         .then((ctag) => {
@@ -513,9 +556,9 @@ export class Bus implements IBus {
 
 
     // ========== Etc  ==========
-    private static ToBuffer(obj: any): NodeBuffer {
+    private static ToBuffer(obj: any): Buffer {
         Bus.remove$type(obj, false);
-        return new Buffer(JSON.stringify(obj));
+        return Buffer.from(JSON.stringify(obj));
     }
 
     private static FromSubscription(obj: IPublishedObj): any {
@@ -591,7 +634,7 @@ export interface IExtendedBus extends IBus {
 }
 
 interface IPublishedObj {
-    content: NodeBuffer;
+    content: Buffer;
     fields: any;
     properties: any;
 }

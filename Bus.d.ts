@@ -8,6 +8,7 @@ export declare class Bus implements IBus {
     private static rpcExchange;
     private static rpcQueueBase;
     private static defaultErrorQueue;
+    private static defaultDeferredAckTimeout;
     private Connection;
     private rpcQueue;
     private rpcConsumerTag;
@@ -19,7 +20,7 @@ export declare class Bus implements IBus {
     private pubChanUp;
     private rpcConsumerUp;
     private static remove$type;
-    SendToErrorQueue(msg: any, err?: string, stack?: string): Promise<boolean>;
+    SendToErrorQueue(msg: any, err?: string, stack?: string): any;
     constructor(config: IBusConfig);
     Publish(msg: {
         TypeID: string;
@@ -31,6 +32,7 @@ export declare class Bus implements IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
+        defer: () => void;
     }) => void, withTopic?: string): Promise<IConsumerDispose>;
     Send(queue: string, msg: {
         TypeID: string;
@@ -42,6 +44,7 @@ export declare class Bus implements IBus {
     }, ackFns?: {
         ack: () => void;
         nack: () => void;
+        defer: () => void;
     }) => void): Promise<IConsumerDispose>;
     ReceiveTypes(queue: string, handlers: {
         rxType: {
@@ -52,6 +55,7 @@ export declare class Bus implements IBus {
         }, ackFns?: {
             ack: () => void;
             nack: () => void;
+            defer: () => void;
         }) => void;
     }[]): Promise<IConsumerDispose>;
     Request(request: {
@@ -81,8 +85,8 @@ export declare class Bus implements IBus {
     }) => Promise<{
         TypeID: string;
     }>): Promise<IConsumerDispose>;
-    private static ToBuffer(obj);
-    private static FromSubscription(obj);
+    private static ToBuffer;
+    private static FromSubscription;
 }
 export declare class ExtendedBus extends Bus implements IExtendedBus {
     constructor(config: IBusConfig);

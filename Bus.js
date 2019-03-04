@@ -1,15 +1,23 @@
-/// <reference path="./typings/index.d.ts" />
 "use strict";
-var __extends = (this && this.__extends) || function (d, b) {
-    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
-    function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-};
-var util = require('util');
-var amqp = require('amqplib');
-var Promise = require('bluebird');
-var uuid = require('node-uuid');
-var RabbitHutch = (function () {
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var util = require("util");
+var amqp = require("amqplib");
+var Promise = require("bluebird");
+var uuid = require("node-uuid");
+var RabbitHutch = /** @class */ (function () {
     function RabbitHutch() {
     }
     RabbitHutch.CreateBus = function (config) {
@@ -23,7 +31,7 @@ var RabbitHutch = (function () {
     return RabbitHutch;
 }());
 exports.RabbitHutch = RabbitHutch;
-var Bus = (function () {
+var Bus = /** @class */ (function () {
     function Bus(config) {
         var _this = this;
         this.config = config;
@@ -94,24 +102,39 @@ var Bus = (function () {
                         var _msg = Bus.FromSubscription(msg);
                         if (msg.properties.type === type.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                            var ackdOrNackd = false;
-                            handler(_msg, {
-                                ack: function () {
-                                    channel.ack(msg);
-                                    ackdOrNackd = true;
-                                },
-                                nack: function () {
-                                    if (!msg.fields.redelivered) {
-                                        channel.nack(msg);
-                                    }
-                                    else {
-                                        //can only nack once
-                                        _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                    }
-                                    ackdOrNackd = true;
+                            var ackdOrNackd_1 = false;
+                            var deferred_1 = false;
+                            var deferTimeout_1;
+                            var ack = function () {
+                                if (deferred_1)
+                                    clearTimeout(deferTimeout_1);
+                                channel.ack(msg);
+                                ackdOrNackd_1 = true;
+                            };
+                            var nack_1 = function () {
+                                if (deferred_1)
+                                    clearTimeout(deferTimeout_1);
+                                if (!msg.fields.redelivered) {
+                                    channel.nack(msg);
                                 }
+                                else {
+                                    //can only nack once
+                                    _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                                }
+                                ackdOrNackd_1 = true;
+                            };
+                            handler(_msg, {
+                                ack: ack,
+                                nack: nack_1,
+                                defer: function (timeout) {
+                                    if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
+                                    deferred_1 = true;
+                                    deferTimeout_1 = setTimeout(function () {
+                                        nack_1();
+                                    }, timeout);
+                                },
                             });
-                            if (!ackdOrNackd)
+                            if (!ackdOrNackd_1 && !deferred_1)
                                 channel.ack(msg);
                         }
                         else {
@@ -157,6 +180,7 @@ var Bus = (function () {
             return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
+                channel.prefetch(_this.config.prefetch);
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
             })
                 .then(function (okQueueReply) {
@@ -165,24 +189,39 @@ var Bus = (function () {
                         var _msg = Bus.FromSubscription(msg);
                         if (msg.properties.type === rxType.TypeID) {
                             _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
-                            var ackdOrNackd = false;
-                            handler(_msg, {
-                                ack: function () {
-                                    channel.ack(msg);
-                                    ackdOrNackd = true;
-                                },
-                                nack: function () {
-                                    if (!msg.fields.redelivered) {
-                                        channel.nack(msg);
-                                    }
-                                    else {
-                                        //can only nack once
-                                        _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                    }
-                                    ackdOrNackd = true;
+                            var ackdOrNackd_2 = false;
+                            var deferred_2 = false;
+                            var deferTimeout_2;
+                            var ack = function () {
+                                if (deferred_2)
+                                    clearTimeout(deferTimeout_2);
+                                channel.ack(msg);
+                                ackdOrNackd_2 = true;
+                            };
+                            var nack_2 = function () {
+                                if (deferred_2)
+                                    clearTimeout(deferTimeout_2);
+                                if (!msg.fields.redelivered) {
+                                    channel.nack(msg);
                                 }
+                                else {
+                                    //can only nack once
+                                    _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                                }
+                                ackdOrNackd_2 = true;
+                            };
+                            handler(_msg, {
+                                ack: ack,
+                                nack: nack_2,
+                                defer: function (timeout) {
+                                    if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
+                                    deferred_2 = true;
+                                    deferTimeout_2 = setTimeout(function () {
+                                        nack_2();
+                                    }, timeout);
+                                },
                             });
-                            if (!ackdOrNackd)
+                            if (!ackdOrNackd_2 && !deferred_2)
                                 channel.ack(msg);
                         }
                         else {
@@ -219,6 +258,7 @@ var Bus = (function () {
             return Promise.resolve(connection.createChannel())
                 .then(function (chanReply) {
                 channel = chanReply;
+                channel.prefetch(_this.config.prefetch);
                 return channel.assertQueue(queue, { durable: true, exclusive: false, autoDelete: false });
             })
                 .then(function (okQueueReply) {
@@ -227,23 +267,38 @@ var Bus = (function () {
                     handlers.filter(function (handler) { return handler.rxType.TypeID === msg.properties.type; }).forEach(function (handler) {
                         _msg.TypeID = _msg.TypeID || msg.properties.type; //so we can get non-BusMessage events
                         var ackdOrNackd = false;
-                        handler.handler(_msg, {
-                            ack: function () {
-                                channel.ack(msg);
-                                ackdOrNackd = true;
-                            },
-                            nack: function () {
-                                if (!msg.fields.redelivered) {
-                                    channel.nack(msg);
-                                }
-                                else {
-                                    //can only nack once
-                                    _this.SendToErrorQueue(_msg, 'attempted to nack previously nack\'d message');
-                                }
-                                ackdOrNackd = true;
+                        var deferred = false;
+                        var deferTimeout;
+                        var ack = function () {
+                            if (deferred)
+                                clearTimeout(deferTimeout);
+                            channel.ack(msg);
+                            ackdOrNackd = true;
+                        };
+                        var nack = function () {
+                            if (deferred)
+                                clearTimeout(deferTimeout);
+                            if (!msg.fields.redelivered) {
+                                channel.nack(msg);
                             }
+                            else {
+                                //can only nack once
+                                _this.SendToErrorQueue(_msg, "attempted to nack previously nack'd message");
+                            }
+                            ackdOrNackd = true;
+                        };
+                        handler.handler(_msg, {
+                            ack: ack,
+                            nack: nack,
+                            defer: function (timeout) {
+                                if (timeout === void 0) { timeout = Bus.defaultDeferredAckTimeout; }
+                                deferred = true;
+                                deferTimeout = setTimeout(function () {
+                                    nack();
+                                }, timeout);
+                            },
                         });
-                        if (!ackdOrNackd)
+                        if (!ackdOrNackd && !deferred)
                             channel.ack(msg);
                     });
                 })
@@ -305,6 +360,7 @@ var Bus = (function () {
                     delete _this.rpcResponseHandlers[msg.properties.correlationId];
                 }
                 else {
+                    //ignore it?
                 }
             });
         })
@@ -442,7 +498,7 @@ var Bus = (function () {
     // ========== Etc  ==========
     Bus.ToBuffer = function (obj) {
         Bus.remove$type(obj, false);
-        return new Buffer(JSON.stringify(obj));
+        return Buffer.from(JSON.stringify(obj));
     };
     Bus.FromSubscription = function (obj) {
         //fields: "{"consumerTag":"amq.ctag-QreMJ-zvC07EW2EKtWZhmQ","deliveryTag":1,"redelivered":false,"exchange":"","routingKey":"easynetq.response.0303b47c-2229-4557-9218-30c99c67f8c9"}"
@@ -454,6 +510,7 @@ var Bus = (function () {
     Bus.rpcExchange = 'easy_net_q_rpc';
     Bus.rpcQueueBase = 'easynetq.response.';
     Bus.defaultErrorQueue = 'EasyNetQ_Default_Error_Queue';
+    Bus.defaultDeferredAckTimeout = 10000;
     Bus.remove$type = function (obj, recurse) {
         if (recurse === void 0) { recurse = true; }
         try {
@@ -473,10 +530,10 @@ var Bus = (function () {
     return Bus;
 }());
 exports.Bus = Bus;
-var ExtendedBus = (function (_super) {
+var ExtendedBus = /** @class */ (function (_super) {
     __extends(ExtendedBus, _super);
     function ExtendedBus(config) {
-        _super.call(this, config);
+        return _super.call(this, config) || this;
     }
     ExtendedBus.prototype.CancelConsumer = function (consumerTag) {
         return Promise.resolve(this.Channels.publishChannel.cancel(consumerTag));
